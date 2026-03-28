@@ -1,0 +1,49 @@
+# ldapgate configuration example
+# Copy to ldapgate.yaml and customize for your environment
+
+ldap:
+  # LDAP server URL (ldap:// for plain, ldaps:// for TLS)
+  url: ldaps://dc.example.com:636
+
+  # Service account DN for directory searches
+  bind_dn: CN=svc,CN=Users,DC=example,DC=com
+  bind_password: your-service-account-password
+
+  # Base DN for user searches
+  base_dn: DC=example,DC=com
+
+  # User filter - choose one:
+  # Active Directory:
+  user_filter: "(sAMAccountName={username})"
+  # OpenLDAP:
+  # user_filter: "(uid={username})"
+
+  # Optional: restrict access to group members
+  # group_dn: CN=app-users,CN=Users,DC=example,DC=com
+
+  # LDAP connection timeout in seconds
+  timeout: 10
+
+proxy:
+  # Listen address and port
+  listen_host: 0.0.0.0
+  listen_port: 9000
+
+  # Backend service URL to proxy traffic to
+  backend_url: http://localhost:8080
+
+  # Secret key for signing session cookies (CHANGE THIS!)
+  # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+  secret_key: change-me-to-something-random-and-secure
+
+  # Session time-to-live in seconds (default: 3600 = 1 hour)
+  session_ttl: 3600
+
+  # Header name for authenticated username (for backend apps)
+  user_header: X-Forwarded-User
+
+  # Login page path
+  login_path: /_auth/login
+
+  # Application name shown in login form
+  app_name: "My Application"

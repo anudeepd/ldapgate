@@ -1,0 +1,28 @@
+<svg viewBox="0 0 420 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon background -->
+  <rect x="4" y="4" width="112" height="112" rx="22" fill="#eff6ff"/>
+
+  <!-- Gate posts -->
+  <line x1="36" y1="94" x2="36" y2="52" stroke="#1d4ed8" stroke-width="5" stroke-linecap="round"/>
+  <line x1="84" y1="94" x2="84" y2="52" stroke="#1d4ed8" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Gate arch -->
+  <path d="M 36 52 Q 60 26 84 52" fill="none" stroke="#1d4ed8" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Gate crossbar -->
+  <line x1="36" y1="72" x2="84" y2="72" stroke="#1d4ed8" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- Padlock shackle -->
+  <path d="M 51 72 L 51 64 Q 51 57 60 57 Q 69 57 69 64 L 69 72"
+    fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Padlock body -->
+  <rect x="47" y="70" width="26" height="20" rx="4" fill="#eff6ff" stroke="#3b82f6" stroke-width="3"/>
+
+  <!-- Keyhole -->
+  <circle cx="60" cy="78" r="2.5" fill="#3b82f6"/>
+  <line x1="60" y1="80" x2="60" y2="84" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Wordmark -->
+  <text x="136" y="74" font-family="'Inter', 'Helvetica Neue', sans-serif" font-size="52" font-weight="600" letter-spacing="-1" fill="#1e3a8a">LDAPGate</text>
+</svg>
