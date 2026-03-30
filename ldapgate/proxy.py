@@ -213,9 +213,13 @@ class ProxyApp:
             return response
 
         @self.app.get(self.config.proxy.logout_path)
-        async def logout():
+        async def logout(request: Request):
             response = RedirectResponse(url=self.config.proxy.login_path, status_code=status.HTTP_302_FOUND)
             response.delete_cookie(SessionManager.COOKIE_NAME)
+            origin = request.headers.get("origin")
+            if origin:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
             return response
 
         @self.app.api_route(
@@ -388,9 +392,13 @@ def create_login_router(
         return response
 
     @router.get(config.proxy.logout_path, include_in_schema=False)
-    async def logout():
+    async def logout(request: Request):
         response = RedirectResponse(url=config.proxy.login_path, status_code=status.HTTP_302_FOUND)
         response.delete_cookie(SessionManager.COOKIE_NAME)
+        origin = request.headers.get("origin")
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
 
     return router
