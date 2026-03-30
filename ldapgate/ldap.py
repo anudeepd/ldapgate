@@ -2,8 +2,10 @@
 
 import asyncio
 import logging
+import ssl
+from typing import Optional
 
-from ldap3 import BASE, NONE, SUBTREE, Connection, Server
+from ldap3 import BASE, NONE, SUBTREE, Connection, Server, Tls
 from ldap3.core.exceptions import LDAPException
 
 from ldapgate.config import LDAPSettings
@@ -25,6 +27,32 @@ def _escape_ldap(value: str) -> str:
     return value
 
 
+def _build_tls(config: LDAPSettings) -> Optional[Tls]:
+    """Build an ldap3 Tls object from config if any TLS settings are specified."""
+    needs_tls = (
+        config.use_starttls
+        or config.tls_ca_cert_file is not None
+        or config.tls_client_cert_file is not None
+        or config.tls_validate.upper() != "REQUIRED"
+    )
+    if not needs_tls:
+        return None
+
+    validate_map = {
+        "NONE": ssl.CERT_NONE,
+        "OPTIONAL": ssl.CERT_OPTIONAL,
+        "REQUIRED": ssl.CERT_REQUIRED,
+    }
+    validate = validate_map.get(config.tls_validate.upper(), ssl.CERT_REQUIRED)
+
+    return Tls(
+        local_private_key_file=config.tls_client_key_file,
+        local_certificate_file=config.tls_client_cert_file,
+        ca_certs_file=config.tls_ca_cert_file,
+        validate=validate,
+    )
+
+
 class LDAPAuthenticator:
     """Authenticates users against LDAP/AD directory."""
 
@@ -35,7 +63,23 @@ class LDAPAuthenticator:
             config: LDAP configuration with server details and filters
         """
         self.config = config
-        self.server = Server(config.url, connect_timeout=config.timeout, get_info=NONE)
+        tls = _build_tls(config)
+        self.server = Server(config.url, connect_timeout=config.timeout, get_info=NONE, tls=tls)
+
+    def _connect(self, user: str, password: str) -> Connection:
+        """Open a bound LDAP connection, applying STARTTLS if configured."""
+        conn = Connection(
+            self.server,
+            user=user,
+            password=password,
+            raise_exceptions=True,
+            auto_referrals=self.config.follow_referrals,
+        )
+        conn.open()
+        if self.config.use_starttls:
+            conn.start_tls()
+        conn.bind()
+        return conn
 
     async def authenticate(self, username: str, password: str) -> bool:
         """Authenticate user against LDAP directory.
@@ -63,14 +107,9 @@ class LDAPAuthenticator:
             return False
 
         try:
-            # Step 1: Bind as service account
-            with Connection(
-                self.server,
-                user=self.config.bind_dn,
-                password=self.config.bind_password,
-                raise_exceptions=True,
-            ) as conn:
-                # Step 2: Search for user DN
+            # Step 1+2: Bind as service account and search for user DN
+            conn = self._connect(self.config.bind_dn, self.config.bind_password)
+            try:
                 # Escape special LDAP characters to prevent injection
                 safe_username = _escape_ldap(username)
                 user_filter = self.config.user_filter.format(username=safe_username)
@@ -84,16 +123,12 @@ class LDAPAuthenticator:
                     return False
 
                 user_dn = conn.entries[0].entry_dn
+            finally:
+                conn.unbind()
 
             # Step 3: Try to bind as the user with supplied password
-            with Connection(
-                self.server,
-                user=user_dn,
-                password=password,
-                raise_exceptions=True,
-            ) as conn:
-                # Connection successful = auth successful
-                pass
+            conn = self._connect(user_dn, password)
+            conn.unbind()
 
             # Step 4: Optional group membership check
             if self.config.group_dn:
@@ -119,12 +154,8 @@ class LDAPAuthenticator:
             True if user is in group (or no group configured), False otherwise
         """
         try:
-            with Connection(
-                self.server,
-                user=self.config.bind_dn,
-                password=self.config.bind_password,
-                raise_exceptions=True,
-            ) as conn:
+            conn = self._connect(self.config.bind_dn, self.config.bind_password)
+            try:
                 # Use BASE scope to check a single group entry for membership.
                 # Supports both AD (member=) and OpenLDAP (uniqueMember=) via OR filter.
                 # Escape the DN for filter safety — DNs can contain (, ), *, \ chars.
@@ -139,6 +170,8 @@ class LDAPAuthenticator:
                     attributes=["cn"],
                 )
                 return bool(conn.entries)
+            finally:
+                conn.unbind()
 
         except LDAPException as e:
             log.debug("LDAP group membership check failed: %s", e)

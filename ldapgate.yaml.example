@@ -24,6 +24,21 @@ ldap:
   # LDAP connection timeout in seconds
   timeout: 10
 
+  # TLS / Mutual TLS (optional)
+  # For ldaps:// with a corporate CA (e.g. DBS/NiFi setup):
+  #   Convert JKS to PEM first:
+  #     keytool -importkeystore -srckeystore keystore.jks -destkeystore client.p12 -deststoretype PKCS12
+  #     openssl pkcs12 -in client.p12 -nokeys -out client.crt.pem
+  #     openssl pkcs12 -in client.p12 -nocerts -nodes -out client.key.pem
+  #     keytool -importkeystore -srckeystore truststore.jks -destkeystore trust.p12 -deststoretype PKCS12
+  #     openssl pkcs12 -in trust.p12 -nokeys -out ca.crt.pem
+  # tls_ca_cert_file: ./conf/ca.crt.pem
+  # tls_client_cert_file: ./conf/client.crt.pem
+  # tls_client_key_file: ./conf/client.key.pem
+  # tls_validate: REQUIRED          # NONE | OPTIONAL | REQUIRED (default: REQUIRED)
+  # use_starttls: false             # true for ldap:// + STARTTLS; false for ldaps:// (default)
+  # follow_referrals: true          # follow LDAP referrals (default: true)
+
 proxy:
   # Listen address and port
   listen_host: 0.0.0.0
@@ -47,3 +62,17 @@ proxy:
 
   # Application name shown in login form
   app_name: "My Application"
+
+# --- AD Global Catalog with mutual TLS example ---
+# ldap:
+#   url: ldaps://dc.example.com:3269
+#   bind_dn: svc@example.com      # UPN format, or full DN
+#   bind_password: "<Manager Password>"
+#   base_dn: DC=example,DC=com
+#   user_filter: "(sAMAccountName={username})"
+#   timeout: 10
+#   tls_ca_cert_file: ./conf/ca.crt.pem
+#   tls_client_cert_file: ./conf/client.crt.pem
+#   tls_client_key_file: ./conf/client.key.pem
+# proxy:
+#   session_ttl: 43200    # 12 hours

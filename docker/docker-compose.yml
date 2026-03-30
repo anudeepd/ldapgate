@@ -1,0 +1,31 @@
+services:
+
+  openldap:
+    image: osixia/openldap:1.5.0
+    environment:
+      LDAP_ORGANISATION: "Example"
+      LDAP_DOMAIN: "example.org"
+      LDAP_ADMIN_PASSWORD: "admin"
+    volumes:
+      - ./alice.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/alice.ldif:ro
+    command: --copy-service
+    ports:
+      - "389:389"
+
+  httpbin:
+    image: kennethreitz/httpbin
+    ports:
+      - "8080:80"
+
+  ldapgate:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ./ldapgate.local.yaml:/app/ldapgate.yaml:ro
+    ports:
+      - "9000:9000"
+    depends_on:
+      - openldap
+      - httpbin
+    command: ["ldapgate", "serve", "--config", "/app/ldapgate.yaml"]

@@ -79,6 +79,57 @@ def test_ldap_settings_defaults():
     assert settings.timeout == 10
 
 
+def test_ldap_settings_tls_defaults():
+    """Verify all TLS fields default to None/False/REQUIRED."""
+    settings = LDAPSettings(
+        url="ldaps://dc.example.com:636",
+        bind_dn="CN=svc,CN=Users,DC=example,DC=com",
+        bind_password="secret",
+        base_dn="DC=example,DC=com",
+    )
+
+    assert settings.tls_ca_cert_file is None
+    assert settings.tls_client_cert_file is None
+    assert settings.tls_client_key_file is None
+    assert settings.tls_validate == "REQUIRED"
+    assert settings.use_starttls is False
+    assert settings.follow_referrals is True
+
+
+def test_ldap_settings_tls_full():
+    """Verify TLS fields parse correctly."""
+    settings = LDAPSettings(
+        url="ldaps://dc.example.com:636",
+        bind_dn="CN=svc,CN=Users,DC=example,DC=com",
+        bind_password="secret",
+        base_dn="DC=example,DC=com",
+        tls_ca_cert_file="/etc/ssl/ca.pem",
+        tls_client_cert_file="/etc/ssl/client.crt.pem",
+        tls_client_key_file="/etc/ssl/client.key.pem",
+        tls_validate="OPTIONAL",
+        follow_referrals=False,
+    )
+
+    assert settings.tls_ca_cert_file == "/etc/ssl/ca.pem"
+    assert settings.tls_client_cert_file == "/etc/ssl/client.crt.pem"
+    assert settings.tls_client_key_file == "/etc/ssl/client.key.pem"
+    assert settings.tls_validate == "OPTIONAL"
+    assert settings.follow_referrals is False
+
+
+def test_ldap_settings_starttls():
+    """Verify use_starttls: true loads correctly."""
+    settings = LDAPSettings(
+        url="ldap://dc.example.com:389",
+        bind_dn="CN=svc,CN=Users,DC=example,DC=com",
+        bind_password="secret",
+        base_dn="DC=example,DC=com",
+        use_starttls=True,
+    )
+
+    assert settings.use_starttls is True
+
+
 def test_proxy_settings_defaults():
     """Test proxy settings with defaults."""
     settings = ProxySettings(

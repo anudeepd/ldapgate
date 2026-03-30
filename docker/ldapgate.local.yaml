@@ -1,0 +1,19 @@
+ldap:
+  url: ldap://openldap:389
+  bind_dn: cn=admin,dc=example,dc=org
+  bind_password: "admin"
+  base_dn: dc=example,dc=org
+  user_filter: "(uid={username})"
+  timeout: 10
+  follow_referrals: false
+
+proxy:
+  listen_host: 0.0.0.0
+  listen_port: 9000
+  backend_url: http://httpbin:80
+  secret_key: local-dev-secret-not-for-production
+  session_ttl: 3600
+  user_header: X-Forwarded-User
+  login_path: /_auth/login
+  app_name: ldapgate-local
+  secure_cookies: false

@@ -26,6 +26,26 @@ class LDAPSettings(BaseModel):
     )
     timeout: int = Field(10, description="LDAP connection timeout in seconds")
 
+    # TLS configuration (all optional — only needed for custom certs or mutual TLS)
+    tls_ca_cert_file: Optional[str] = Field(
+        None, description="Path to CA certificate PEM file for server certificate validation"
+    )
+    tls_client_cert_file: Optional[str] = Field(
+        None, description="Path to client certificate PEM file (for mutual TLS)"
+    )
+    tls_client_key_file: Optional[str] = Field(
+        None, description="Path to client private key PEM file (for mutual TLS)"
+    )
+    tls_validate: str = Field(
+        "REQUIRED", description="Server cert validation: NONE, OPTIONAL, or REQUIRED"
+    )
+    use_starttls: bool = Field(
+        False, description="Use STARTTLS extension (for ldap:// URLs; not needed for ldaps://)"
+    )
+    follow_referrals: bool = Field(
+        True, description="Automatically follow LDAP referrals (default: True)"
+    )
+
 
 class ProxySettings(BaseModel):
     """Reverse proxy configuration."""

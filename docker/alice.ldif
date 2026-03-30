@@ -1,0 +1,16 @@
+dn: ou=users,dc=example,dc=org
+objectClass: organizationalUnit
+ou: users
+
+dn: uid=alice,ou=users,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: alice
+cn: Alice
+sn: Test
+mail: alice@example.org
+userPassword: alice123
+uidNumber: 1000
+gidNumber: 1000
+homeDirectory: /home/alice

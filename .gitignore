@@ -43,3 +43,4 @@ Thumbs.db
 
 # Local testing
 ldapgate.yaml
+memory/
