@@ -48,6 +48,29 @@ proxy:
 
 All settings can also be provided via environment variables with `__` separators (e.g. `LDAP__URL`, `PROXY__SECRET_KEY`).
 
+## Corporate / Active Directory setup
+
+For corp AD environments with mutual TLS or custom CA certificates (e.g. NiFi, internal PKI), see **[docs/nifi-ldap-integration.md](docs/nifi-ldap-integration.md)** for a step-by-step guide covering cert extraction, bind DN formats, and common error codes.
+
+**Pre-flight check:** before configuring LDAPGate, fill in the variables at the top of `ldap_check.py` and run it to verify connectivity end-to-end:
+
+```bash
+python ldap_check.py
+# All checks passed. LDAPGate should work with this config.
+```
+
+It confirms your bind credentials work, the user search returns results, and TLS validates correctly. If cert validation against an internal CA isn't feasible, set `tls_validate: NONE` in the `ldap:` section.
+
+**Restricting access to specific users:** use `allowed_users` as a simple local allowlist (no AD group required):
+
+```yaml
+ldap:
+  # ... other settings ...
+  allowed_users:
+    - alice
+    - bob
+```
+
 ## Mode 1 — Standalone Reverse Proxy
 
 Run ldapgate as a standalone process in front of any app. Only authenticated requests are forwarded to the backend.
@@ -69,6 +92,34 @@ copyparty -p 8080 --idp-h-usr X-Forwarded-User --idp-logout /_auth/logout -v ~/D
 ```
 
 copyparty trusts the `X-Forwarded-User` header injected by ldapgate, and its logout button redirects to `/_auth/logout` which clears the ldapgate session before sending the user back to the login page.
+
+## WebDAV mounting (Windows & Mac)
+
+LDAPGate supports HTTP Basic auth for WebDAV clients — they authenticate directly without going through the browser login flow. Any client that sends an `Authorization: Basic` header (Windows WebDAV, macOS Finder, `curl`) is verified against LDAP on each request.
+
+**Windows** — mount as a drive letter (Windows will prompt for credentials if omitted):
+
+```
+net use w: http://host:port /user:username password
+```
+
+**macOS Finder** — Go → Connect to Server → enter `http://host:port`
+
+**macOS Terminal:**
+
+```bash
+osascript -e 'mount volume "http://host:port"'
+# or with credentials embedded:
+osascript -e 'mount volume "http://user:pass@host:port"'
+```
+
+For copyparty specifically, launch it with `--rproxy 1` and `--xff-src` set to LDAPGate's address so it trusts the injected header:
+
+```bash
+copyparty -p 8989 --rproxy 1 --xf-proto-fb http --xff-src=10.52.0.0/16 \
+  --idp-h-usr X-Forwarded-User --idp-logout /_auth/logout \
+  -v /path/to/share:/:rw
+```
 
 ## Mode 2 — FastAPI Middleware
 

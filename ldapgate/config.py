@@ -1,7 +1,7 @@
 """Configuration management for ldapgate."""
 
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import yaml
 from pydantic import BaseModel, Field
@@ -23,6 +23,9 @@ class LDAPSettings(BaseModel):
     )
     group_dn: Optional[str] = Field(
         None, description="Optional group DN to restrict access (e.g., CN=app-users,..."
+    )
+    allowed_users: Optional[List[str]] = Field(
+        None, description="Optional list of usernames allowed through (local allowlist)"
     )
     timeout: int = Field(10, description="LDAP connection timeout in seconds")
 

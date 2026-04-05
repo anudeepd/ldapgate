@@ -135,6 +135,11 @@ class LDAPAuthenticator:
                 if not self._check_group_membership(user_dn):
                     return False
 
+            # Step 5: Optional local allowlist check
+            if self.config.allowed_users is not None:
+                if username not in self.config.allowed_users:
+                    return False
+
             return True
 
         except LDAPException as e:
