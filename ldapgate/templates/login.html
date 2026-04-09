@@ -178,6 +178,18 @@
     button[type="submit"].loading .btn-label { opacity: 0.8; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    .powered-by {
+      margin-top: 1.5rem;
+      text-align: center;
+      font-size: 0.72rem;
+      color: #475569;
+    }
+    .powered-by a {
+      color: #64748b;
+      text-decoration: none;
+    }
+    .powered-by a:hover { color: #94a3b8; }
+
     @media (max-width: 480px) {
       .card { padding: 2rem 1.5rem; }
     }
@@ -219,6 +231,7 @@
         </button>
       </div>
     </form>
+    <div class="powered-by">Powered by <a href="https://github.com/anudeepd/ldapgate" tabindex="-1">LDAPGate</a></div>
   </div>
 
   <script>
@@ -228,8 +241,5 @@
       btn.classList.add('loading');
     });
   </script>
-  <p style="text-align:center;margin-top:2rem;font-size:0.75rem;color:#9ca3af;">
-    Powered by <a href="https://github.com/anudeepd/ldapgate" style="color:#9ca3af;">LDAPGate</a>
-  </p>
 </body>
 </html>

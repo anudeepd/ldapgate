@@ -1,8 +1,6 @@
 """FastAPI reverse proxy application with LDAP auth."""
 
-import base64
-import time
-from collections import defaultdict
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -13,11 +11,19 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import RedirectResponse
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
+from ldapgate._auth_utils import BasicAuthRateLimiter, parse_basic_auth
 from ldapgate.config import LDAPConfig
 from ldapgate.ldap import LDAPAuthenticator
 from ldapgate.sessions import SessionManager
 
+log = logging.getLogger(__name__)
+
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+_401 = Response(
+    status_code=401,
+    headers={"WWW-Authenticate": 'Basic realm="LDAPGate"'},
+)
 
 # Headers that must not be forwarded between proxy hops (RFC 2616 §13.5.1)
 _HOP_BY_HOP = frozenset({
@@ -101,6 +107,9 @@ LOGIN_FORM_HTML = """
             align-items: center;
         }
         .error button { width: auto; padding: 0; background: none; color: inherit; text-decoration: underline; }
+        .powered-by { margin-top: 1.5rem; text-align: center; font-size: 0.72rem; color: #475569; }
+        .powered-by a { color: #64748b; text-decoration: none; }
+        .powered-by a:hover { color: #94a3b8; }
     </style>
 </head>
 <body>
@@ -119,78 +128,11 @@ LOGIN_FORM_HTML = """
             {% if redirect %}<input type="hidden" name="redirect" value="{{ redirect }}">{% endif %}
             <button type="submit">Sign in</button>
         </form>
+        <div class="powered-by">Powered by <a href="https://github.com/anudeepd/ldapgate" tabindex="-1">LDAPGate</a></div>
     </div>
-    <p style="text-align:center;margin-top:2rem;font-size:0.75rem;color:#9ca3af;">
-        Powered by <a href="https://github.com/anudeepd/ldapgate" style="color:#9ca3af;">LDAPGate</a>
-    </p>
 </body>
 </html>
 """
-
-
-def _parse_basic_auth(authorization: str) -> Optional[tuple[str, str]]:
-    """Parse an Authorization: Basic header. Returns (username, password) or None."""
-    if not authorization.startswith("Basic "):
-        return None
-    try:
-        decoded = base64.b64decode(authorization[6:]).decode("utf-8", errors="strict")
-        username, _, password = decoded.partition(":")
-        if not username:
-            return None
-        return username, password
-    except Exception:
-        return None
-
-
-class _BasicAuthRateLimiter:
-    """Per-IP sliding-window rate limiter for Basic auth failures.
-
-    After MAX_FAILURES failed attempts within WINDOW_SECONDS, the IP is locked
-    out for LOCKOUT_SECONDS. A successful auth clears the counter.
-
-    NOTE: state is per-process. With multiple uvicorn workers the effective
-    threshold is MAX_FAILURES * workers. Run single-process (the default
-    ``ldapgate serve``) or back this with a shared cache (Redis, etc.) if
-    stricter limits are required.
-    """
-
-    MAX_FAILURES = 5
-    WINDOW_SECONDS = 300   # count failures within this rolling window
-    LOCKOUT_SECONDS = 60   # lockout duration once threshold is reached
-
-    def __init__(self) -> None:
-        # ip -> list of failure timestamps (monotonic)
-        self._failures: dict[str, list[float]] = defaultdict(list)
-        # ip -> lockout-expiry timestamp (monotonic)
-        self._lockouts: dict[str, float] = {}
-
-    def is_locked_out(self, ip: str) -> bool:
-        now = time.monotonic()
-        lockout_until = self._lockouts.get(ip, 0.0)
-        if now < lockout_until:
-            return True
-        if ip in self._lockouts:
-            del self._lockouts[ip]
-            self._failures.pop(ip, None)
-            return False
-        # No active lockout — prune stale window entries and drop empty records.
-        if ip in self._failures:
-            self._failures[ip] = [t for t in self._failures[ip] if now - t < self.WINDOW_SECONDS]
-            if not self._failures[ip]:
-                del self._failures[ip]
-        return False
-
-    def record_failure(self, ip: str) -> None:
-        now = time.monotonic()
-        window = [t for t in self._failures[ip] if now - t < self.WINDOW_SECONDS]
-        window.append(now)
-        self._failures[ip] = window
-        if len(window) >= self.MAX_FAILURES:
-            self._lockouts[ip] = now + self.LOCKOUT_SECONDS
-
-    def record_success(self, ip: str) -> None:
-        self._failures.pop(ip, None)
-        self._lockouts.pop(ip, None)
 
 
 class ProxyApp:
@@ -306,22 +248,14 @@ class ProxyApp:
             # Check for HTTP Basic auth first (WebDAV clients, curl, etc.)
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Basic "):
-                client_ip = (request.client.host if request.client else "unknown")
-                _401 = Response(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    headers={"WWW-Authenticate": 'Basic realm="LDAPGate"'},
-                )
+                client_ip = request.client.host if request.client else "unknown"
                 if self._basic_auth_limiter.is_locked_out(client_ip):
+                    log.warning("Basic auth: rejecting locked-out IP %s", client_ip)
                     return _401
-                creds = _parse_basic_auth(auth_header)
-                if creds:
-                    ba_user, ba_pass = creds
-                    if await self.ldap_auth.authenticate(ba_user, ba_pass):
-                        self._basic_auth_limiter.record_success(client_ip)
-                        username = ba_user
-                    else:
-                        self._basic_auth_limiter.record_failure(client_ip)
-                        return _401
+                creds = parse_basic_auth(auth_header)
+                if creds and await self.ldap_auth.authenticate(creds[0], creds[1]):
+                    self._basic_auth_limiter.record_success(client_ip)
+                    username = creds[0]
                 else:
                     self._basic_auth_limiter.record_failure(client_ip)
                     return _401
@@ -332,7 +266,13 @@ class ProxyApp:
                 username = self.session_manager.verify_session(session_cookie)
 
             if not username:
-                # Redirect to login with original URL as redirect target
+                # Non-browser clients (WebDAV, curl, etc.) don't accept text/html
+                # and won't follow a login redirect — give them a 401 challenge
+                # so they know to send Basic auth credentials.
+                accept = request.headers.get("accept", "")
+                if "text/html" not in accept:
+                    return _401
+                # Redirect browsers to login with original URL as redirect target
                 redirect_url = request.url.path
                 if request.url.query:
                     redirect_url += f"?{request.url.query}"
@@ -347,7 +287,13 @@ class ProxyApp:
             # Use raw_path to preserve percent-encoding (%2F, %20, etc.)
             # Falls back to decoded path if the ASGI server omits raw_path.
             raw_path = request.scope.get("raw_path")
-            forward_path = raw_path.decode("ascii") if raw_path else request.url.path
+            if isinstance(raw_path, bytes):
+                try:
+                    forward_path = raw_path.decode("latin-1")
+                except Exception:
+                    forward_path = request.url.path
+            else:
+                forward_path = raw_path or request.url.path
             backend_url = self.config.proxy.backend_url.rstrip("/") + forward_path
             if request.url.query:
                 backend_url += f"?{request.url.query}"
@@ -361,6 +307,10 @@ class ProxyApp:
                 if k.lower() not in ("host", user_header_lower, "authorization")
             }
             headers[self.config.proxy.user_header] = username
+            # Let backends behind --rproxy (e.g. copyparty) know the original
+            # host so their CORS / redirect checks use the public-facing URL.
+            if original_host := request.headers.get("host"):
+                headers["X-Forwarded-Host"] = original_host
 
             try:
                 backend_response = await client.request(

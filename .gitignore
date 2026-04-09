@@ -44,3 +44,11 @@ Thumbs.db
 # Local testing
 ldapgate.yaml
 memory/
+
+# Local tools / one-off scripts (not published)
+mount.py
+decrypt_nifi.py
+ldap_check.py
+docs/
+TODO.md
+.claude/

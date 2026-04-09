@@ -1,5 +1,6 @@
 """Starlette middleware for FastAPI LDAP authentication."""
 
+import logging
 from typing import Optional
 from urllib.parse import quote
 
@@ -9,8 +10,17 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
+from ldapgate._auth_utils import BasicAuthRateLimiter, parse_basic_auth
 from ldapgate.config import LDAPConfig
+from ldapgate.ldap import LDAPAuthenticator
 from ldapgate.sessions import SessionManager
+
+log = logging.getLogger(__name__)
+
+_401 = Response(
+    status_code=401,
+    headers={"WWW-Authenticate": 'Basic realm="LDAPGate"'},
+)
 
 
 class LDAPAuthMiddleware(BaseHTTPMiddleware):
@@ -33,12 +43,15 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         self.session_manager = SessionManager(
             config.proxy.secret_key, config.proxy.session_ttl
         )
+        self.ldap_auth = LDAPAuthenticator(config.ldap)
+        self._basic_auth_limiter = BasicAuthRateLimiter()
 
     async def dispatch(self, request: Request, call_next) -> Response:
         """Middleware dispatch handler.
 
-        Checks session cookie. If valid, adds request.state.user and injects header.
-        If invalid, redirects to login form.
+        Checks Basic auth header first (for WebDAV/API clients), then falls
+        back to session cookie. If neither is valid, non-browser clients get a
+        401 challenge; browsers are redirected to the login form.
 
         Args:
             request: Incoming request
@@ -51,12 +64,34 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         if self._should_skip_auth(request.url.path):
             return await call_next(request)
 
-        # Check session
-        session_cookie = request.cookies.get(SessionManager.COOKIE_NAME)
-        username = self.session_manager.verify_session(session_cookie)
+        username: Optional[str] = None
+
+        # Check HTTP Basic auth first (WebDAV clients, curl, etc.)
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Basic "):
+            client_ip = request.client.host if request.client else "unknown"
+            if self._basic_auth_limiter.is_locked_out(client_ip):
+                log.warning("Basic auth: rejecting locked-out IP %s", client_ip)
+                return _401
+            creds = parse_basic_auth(auth_header)
+            if creds and await self.ldap_auth.authenticate(creds[0], creds[1]):
+                self._basic_auth_limiter.record_success(client_ip)
+                username = creds[0]
+            else:
+                self._basic_auth_limiter.record_failure(client_ip)
+                return _401
+
+        # Fall back to session cookie
+        if username is None:
+            session_cookie = request.cookies.get(SessionManager.COOKIE_NAME)
+            username = self.session_manager.verify_session(session_cookie)
 
         if not username:
-            # Redirect to login with original URL as redirect target
+            # Non-browser clients won't follow a redirect — give them a 401 challenge
+            accept = request.headers.get("accept", "")
+            if "text/html" not in accept:
+                return _401
+            # Redirect browsers to login with original URL as redirect target
             redirect_url = request.url.path
             if request.url.query:
                 redirect_url += f"?{request.url.query}"

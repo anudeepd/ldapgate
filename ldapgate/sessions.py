@@ -20,6 +20,9 @@ class SessionManager:
         self.serializer = URLSafeTimedSerializer(secret_key)
         self.session_ttl = session_ttl
 
+    # Prevent cookie bloat from unusually long usernames
+    MAX_USERNAME_LENGTH = 256
+
     def create_session(self, username: str) -> str:
         """Create signed session cookie value.
 
@@ -32,6 +35,8 @@ class SessionManager:
         Returns:
             Signed, URL-safe cookie value
         """
+        if len(username) > self.MAX_USERNAME_LENGTH:
+            raise ValueError(f"Username exceeds maximum length of {self.MAX_USERNAME_LENGTH}")
         return self.serializer.dumps(username)
 
     def verify_session(self, cookie_value: Optional[str]) -> Optional[str]:

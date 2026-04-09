@@ -126,7 +126,9 @@ class LDAPAuthenticator:
             finally:
                 conn.unbind()
 
-            # Step 3: Try to bind as the user with supplied password
+            # Step 3: Try to bind as the user with supplied password.
+            # This conn has its own try/finally — unbind() here is intentional
+            # and independent of the service-account conn unbound above.
             conn = self._connect(user_dn, password)
             conn.unbind()
 

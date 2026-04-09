@@ -104,8 +104,13 @@ def serve(config: Path, host: str, port: int, backend: str, reload: bool):
 
 def _reload_app_factory():
     """App factory used by uvicorn --reload (needs importable callable)."""
+    import sys
     config_path = os.environ.get(_CONFIG_ENV_VAR)
-    cfg = load_config(config_path)
+    try:
+        cfg = load_config(config_path)
+    except Exception as e:
+        print(f"ldapgate: failed to load config: {e}", file=sys.stderr)
+        raise
     backend = os.environ.get("LDAPGATE_BACKEND_URL")
     if backend:
         cfg.proxy.backend_url = backend
