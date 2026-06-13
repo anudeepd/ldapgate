@@ -1,16 +1,37 @@
 """CLI for ldapgate reverse proxy."""
 
+import json
 import os
+import tempfile
 from pathlib import Path
 
 import click
 import uvicorn
 
-from ldapgate.config import load_config
+from ldapgate.config import load_config, validate_backend_url
 from ldapgate.proxy import create_proxy_app
 
-# Env var used to pass config path to the module-level app factory for --reload mode
-_CONFIG_ENV_VAR = "LDAPGATE_CONFIG_PATH"
+# Env var used to pass reload configuration via a secure temporary file.
+# The file itself (not the env var) holds the config path and overrides.
+_RELOAD_FILE_ENV = "LDAPGATE_RELOAD_FILE"
+
+
+def _sanitize_error_message(exc: Exception) -> str:
+    """Sanitize an exception message to avoid leaking config details."""
+    msg = str(exc)
+    # Redact paths, passwords, and connection details
+    redactions = [
+        (r"/[^\s]+\.(yaml|yml|json|toml|env|txt|ini)", "[REDACTED_CONFIG_PATH]"),
+        (r"password[^\s]*", "[REDACTED_PASSWORD]"),
+        (r"secret[^\s]*", "[REDACTED_SECRET]"),
+        (r"bind_dn[^\s]*", "[REDACTED_DN]"),
+        (r"ldap://[^\s]+", "[REDACTED_URL]"),
+        (r"ldaps://[^\s]+", "[REDACTED_URL]"),
+    ]
+    import re
+    for pattern, replacement in redactions:
+        msg = re.sub(pattern, replacement, msg, flags=re.IGNORECASE)
+    return msg
 
 
 @click.group()
@@ -62,7 +83,9 @@ def serve(config: Path, host: str, port: int, backend: str, reload: bool):
         if port:
             cfg.proxy.listen_port = port
         if backend:
-            cfg.proxy.backend_url = backend
+            cfg.proxy.backend_url = validate_backend_url(backend)
+        if not cfg.proxy.backend_url:
+            raise ValueError("proxy.backend_url is required for `ldapgate serve`")
 
         click.echo(
             f"Starting ldapgate proxy on {cfg.proxy.listen_host}:{cfg.proxy.listen_port}"
@@ -71,12 +94,24 @@ def serve(config: Path, host: str, port: int, backend: str, reload: bool):
         click.echo(f"Login path: {cfg.proxy.login_path}")
 
         if reload:
-            # Reload mode requires an import string; pass config + overrides via env vars
-            # so the factory in this module can reconstruct the app identically.
+            # Write reload config to a private temp file instead of env vars
+            # so config paths are not exposed via /proc/*/environ.
+            reload_cfg = {}
             if config:
-                os.environ[_CONFIG_ENV_VAR] = str(config)
+                reload_cfg["config"] = str(config)
             if backend:
-                os.environ["LDAPGATE_BACKEND_URL"] = backend
+                reload_cfg["backend"] = backend
+            if host:
+                reload_cfg["host"] = host
+            if port:
+                reload_cfg["port"] = port
+            fd, tmp_path = tempfile.mkstemp(
+                suffix=".json", prefix="ldapgate_reload_"
+            )
+            os.close(fd)
+            with open(tmp_path, "w") as f:
+                json.dump(reload_cfg, f)
+            os.environ[_RELOAD_FILE_ENV] = tmp_path
             uvicorn.run(
                 "ldapgate.cli:_reload_app_factory",
                 factory=True,
@@ -95,25 +130,55 @@ def serve(config: Path, host: str, port: int, backend: str, reload: bool):
             )
 
     except FileNotFoundError as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: Config file not found", err=True)
         raise SystemExit(1)
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        safe_msg = _sanitize_error_message(e)
+        click.echo(f"Error: {safe_msg}", err=True)
         raise SystemExit(1)
 
 
 def _reload_app_factory():
-    """App factory used by uvicorn --reload (needs importable callable)."""
+    """App factory used by uvicorn --reload (needs importable callable).
+
+    Reads configuration from a private temp file (set by the parent
+    process) rather than environment variables to avoid leaking paths.
+    """
     import sys
-    config_path = os.environ.get(_CONFIG_ENV_VAR)
+
+    tmp_path = os.environ.pop(_RELOAD_FILE_ENV, None)
+    reload_cfg = {}
+    if tmp_path:
+        try:
+            with open(tmp_path) as f:
+                reload_cfg = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            pass
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    config_path = reload_cfg.get("config")
     try:
         cfg = load_config(config_path)
     except Exception as e:
-        print(f"ldapgate: failed to load config: {e}", file=sys.stderr)
+        safe_msg = _sanitize_error_message(e)
+        print(f"ldapgate: failed to load config: {safe_msg}", file=sys.stderr)
         raise
-    backend = os.environ.get("LDAPGATE_BACKEND_URL")
+
+    backend = reload_cfg.get("backend")
     if backend:
-        cfg.proxy.backend_url = backend
+        cfg.proxy.backend_url = validate_backend_url(backend)
+    if not cfg.proxy.backend_url:
+        raise ValueError("proxy.backend_url is required for `ldapgate serve`")
+    host = reload_cfg.get("host")
+    if host:
+        cfg.proxy.listen_host = host
+    port = reload_cfg.get("port")
+    if port:
+        cfg.proxy.listen_port = int(port)
     return create_proxy_app(cfg)
 
 

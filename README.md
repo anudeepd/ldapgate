@@ -34,8 +34,9 @@ ldap:
   bind_password: secret
   base_dn: DC=example,DC=com
   user_filter: "(sAMAccountName={username})"         # AD; OpenLDAP: (uid={username})
-  group_dn: CN=app-users,CN=Users,DC=example,DC=com  # optional — restrict by group
-  allowed_users:                                      # optional — local allowlist
+  # LDAPGate requires at least one authorization rule by default:
+  group_dn: CN=app-users,CN=Users,DC=example,DC=com  # restrict by group
+  allowed_users:                                      # or restrict by local allowlist
     - alice
     - bob
   timeout: 10
@@ -69,6 +70,8 @@ ldap:
   tls_validate: NONE
   # ... other settings ...
 ```
+
+> ⚠️ **Warning:** `tls_validate: NONE` disables all TLS certificate validation and makes you vulnerable to man-in-the-middle attacks. Whenever possible, use `tls_ca_cert_file` to trust your internal CA instead.
 
 For plain LDAP with STARTTLS:
 

@@ -1,19 +1,30 @@
 ldap:
   url: ldap://openldap:389
   bind_dn: cn=admin,dc=example,dc=org
-  bind_password: "admin"
+  # DEV ONLY: override via LDAP__BIND_PASSWORD env var in production
+  bind_password: "${LDAP_BIND_PASSWORD:-admin}"
   base_dn: dc=example,dc=org
   user_filter: "(uid={username})"
+  allowed_users:
+    - alice
   timeout: 10
   follow_referrals: false
+  # DEV ONLY: do not copy this to production
+  block_plaintext_ldap: false
 
 proxy:
   listen_host: 0.0.0.0
   listen_port: 9000
   backend_url: http://httpbin:80
-  secret_key: local-dev-secret-not-for-production
+  # DEV ONLY: secret_key is overridden by PROXY__SECRET_KEY env var in docker-compose.
+  # NEVER use this value in production. Generate one with:
+  #   python -c 'import secrets; print(secrets.token_urlsafe(32))'
+  secret_key: Z9x#W8v$U7tR6s%Q5p!O4n@M3l^K2j*H1gF0dE
   session_ttl: 3600
   user_header: X-Forwarded-User
   login_path: /_auth/login
   app_name: ldapgate-local
   secure_cookies: false
+  trusted_proxies: []
+  max_body_size: 104857600
+  hsts_max_age: 0

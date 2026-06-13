@@ -10,6 +10,11 @@ COPY assets/ ./assets/
 
 RUN uv pip install --system .
 
+RUN groupadd -r ldapgate && useradd -r -g ldapgate -d /app -s /sbin/nologin ldapgate && \
+    chown -R ldapgate:ldapgate /app
+
+USER ldapgate
+
 EXPOSE 9000
 
 CMD ["ldapgate", "serve", "--config", "/app/ldapgate.yaml"]

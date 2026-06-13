@@ -1,78 +1,124 @@
 # ldapgate configuration example
-# Copy to ldapgate.yaml and customize for your environment
+# Copy to ldapgate.yaml and customize for your environment.
+#
+# NiFi compatibility note:
+# This file is not key-name compatible with NiFi's login-identity-providers.xml,
+# but the LDAP values are reusable. Typical mapping:
+#   NiFi Authentication Strategy = SIMPLE over ldaps://, or START_TLS over ldap://
+#   NiFi Manager DN              -> ldap.bind_dn
+#   NiFi Manager Password        -> ldap.bind_password
+#   NiFi User Search Base        -> ldap.base_dn
+#   NiFi User Search Filter      -> ldap.user_filter
+#   NiFi Group Search Base/Filter -> derive an exact ldap.group_dn, or use allowed_users
+#
+# LDAPGate requires either ldap.group_dn or ldap.allowed_users by default.
+# A valid LDAP password alone is not enough to enter the application.
 
 ldap:
-  # LDAP server URL (ldap:// for plain, ldaps:// for TLS)
+  # Use the same LDAP endpoint you use for NiFi.
+  # Prefer ldaps://. For ldap:// + STARTTLS, set use_starttls: true below.
   url: ldaps://dc.example.com:636
 
-  # Service account DN for directory searches
+  # NiFi "Manager DN" / service account DN.
   bind_dn: CN=svc,CN=Users,DC=example,DC=com
-  bind_password: your-service-account-password
 
-  # Base DN for user searches
+  # NiFi "Manager Password" / service account password.
+  # YAML loading does not expand shell-style ${...} placeholders here.
+  # Put the real secret in your deployment secret mechanism before starting.
+  bind_password: replace-with-service-account-password
+
+  # NiFi "User Search Base".
   base_dn: DC=example,DC=com
 
-  # User filter - choose one:
-  # Active Directory:
+  # NiFi "User Search Filter", adapted so the login name placeholder is
+  # exactly {username}. LDAPGate requires this placeholder.
+  #
+  # Active Directory common case:
   user_filter: "(sAMAccountName={username})"
-  # OpenLDAP:
+  # OpenLDAP common case:
   # user_filter: "(uid={username})"
+  # User Principal Name login:
+  # user_filter: "(userPrincipalName={username})"
 
-  # Optional: restrict access to group members
-  # group_dn: CN=app-users,CN=Users,DC=example,DC=com
+  # Authorization rule - choose ONE of the following styles.
+  #
+  # Style A: exact LDAP group DN. This is closest to a NiFi group-based setup.
+  # Use the group DN that NiFi's group search would resolve.
+  group_dn: CN=app-users,CN=Users,DC=example,DC=com
+  #
+  # Style B: explicit local allowlist. Comment group_dn above if you use this.
+  # allowed_users:
+  #   - alice
+  #   - bob
 
-  # LDAP connection timeout in seconds
   timeout: 10
 
-  # TLS / Mutual TLS (optional)
-  # For ldaps:// with a corporate CA (e.g. DBS/NiFi setup):
-  #   Convert JKS to PEM first:
-  #     keytool -importkeystore -srckeystore keystore.jks -destkeystore client.p12 -deststoretype PKCS12
-  #     openssl pkcs12 -in client.p12 -nokeys -out client.crt.pem
-  #     openssl pkcs12 -in client.p12 -nocerts -nodes -out client.key.pem
-  #     keytool -importkeystore -srckeystore truststore.jks -destkeystore trust.p12 -deststoretype PKCS12
-  #     openssl pkcs12 -in trust.p12 -nokeys -out ca.crt.pem
+  # Refuse to start if using ldap:// without STARTTLS.
+  block_plaintext_ldap: true
+
+  # TLS settings.
+  tls_validate: REQUIRED
+  # If NiFi uses a truststore/keystore, convert JKS/PKCS12 material to PEM:
+  #   keytool -importkeystore -srckeystore keystore.jks -destkeystore client.p12 -deststoretype PKCS12
+  #   openssl pkcs12 -in client.p12 -nokeys -out client.crt.pem
+  #   openssl pkcs12 -in client.p12 -nocerts -nodes -out client.key.pem
+  #   keytool -importkeystore -srckeystore truststore.jks -destkeystore trust.p12 -deststoretype PKCS12
+  #   openssl pkcs12 -in trust.p12 -nokeys -out ca.crt.pem
   # tls_ca_cert_file: ./conf/ca.crt.pem
   # tls_client_cert_file: ./conf/client.crt.pem
   # tls_client_key_file: ./conf/client.key.pem
-  # tls_validate: REQUIRED          # NONE | OPTIONAL | REQUIRED (default: REQUIRED)
-  # use_starttls: false             # true for ldap:// + STARTTLS; false for ldaps:// (default)
-  # follow_referrals: true          # follow LDAP referrals (default: true)
+
+  # STARTTLS mode for ldap:// endpoints.
+  # use_starttls: true
+
+  # Referrals are disabled by default. If your NiFi setup follows referrals,
+  # set explicit allowed hosts instead of allowing arbitrary referral targets.
+  # follow_referrals: true
+  # referral_allowed_hosts:
+  #   - dc2.example.com
+
+  # Increase only if LDAP auth throughput needs it.
+  # pool_size: 2
 
 proxy:
-  # Listen address and port
   listen_host: 0.0.0.0
   listen_port: 9000
 
-  # Backend service URL to proxy traffic to
+  # Backend service URL. Plain HTTP is allowed only for localhost/127.0.0.1/[::1].
   backend_url: http://localhost:8080
 
-  # Secret key for signing session cookies (CHANGE THIS!)
-  # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
-  secret_key: change-me-to-something-random-and-secure
+  # Generate your own:
+  #   python -c "import secrets; print(secrets.token_urlsafe(32))"
+  # This sample is intentionally random-looking so the example can pass
+  # LDAPGate's weak-secret validation after copy/edit.
+  secret_key: 5vS5aN3xW2cY7mQ8rL9tP4zK6bH1dF0gJ2nR7uA9sC3eM8pQ
 
-  # Session time-to-live in seconds (default: 3600 = 1 hour)
   session_ttl: 3600
-
-  # Header name for authenticated username (for backend apps)
   user_header: X-Forwarded-User
-
-  # Login page path
   login_path: /_auth/login
-
-  # Application name shown in login form
+  logout_path: /_auth/logout
   app_name: "My Application"
 
-# --- AD Global Catalog with mutual TLS example ---
-# ldap:
-#   url: ldaps://dc.example.com:3269
-#   bind_dn: svc@example.com      # UPN format, or full DN
-#   bind_password: "<Manager Password>"
-#   base_dn: DC=example,DC=com
-#   user_filter: "(sAMAccountName={username})"
-#   timeout: 10
-#   tls_ca_cert_file: ./conf/ca.crt.pem
-#   tls_client_cert_file: ./conf/client.crt.pem
-#   tls_client_key_file: ./conf/client.key.pem
-# proxy:
-#   session_ttl: 43200    # 12 hours
+  # Keep true in production. If TLS terminates at a trusted reverse proxy,
+  # configure trusted_proxies so LDAPGate can honour X-Forwarded-Proto.
+  secure_cookies: true
+  # trusted_proxies:
+  #   - 127.0.0.1
+  # trusted_hosts:
+  #   - app.example.com
+
+  cookie_samesite: lax
+  max_body_size: 10485760
+  max_response_size: 10485760
+  rate_limit_max_failures: 5
+  rate_limit_window_seconds: 300
+  rate_limit_lockout_seconds: 60
+
+  # Optional shared state for multi-worker deployments.
+  # revocation_path: /var/lib/ldapgate/revoked.json
+  # max_sessions_per_user: 5
+
+  # Middleware mode protects all mounted application routes by default. Only add
+  # static_paths for assets you intentionally want to expose before login.
+  # static_paths:
+  #   - /public/

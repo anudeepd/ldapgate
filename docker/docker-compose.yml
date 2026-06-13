@@ -5,7 +5,7 @@ services:
     environment:
       LDAP_ORGANISATION: "Example"
       LDAP_DOMAIN: "example.org"
-      LDAP_ADMIN_PASSWORD: "admin"
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:?Set LDAP_ADMIN_PASSWORD env var}"
     volumes:
       - ./alice.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/alice.ldif:ro
     command: --copy-service
@@ -28,4 +28,16 @@ services:
     depends_on:
       - openldap
       - httpbin
-    command: ["ldapgate", "serve", "--config", "/app/ldapgate.yaml"]
+    environment:
+      # ⚠️ MUST override LDAPGATE_SECRET_KEY in production for persistent sessions.
+      # For local dev, a random key is generated on each container start.
+      PROXY__SECRET_KEY: "${LDAPGATE_SECRET_KEY:-}"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$$LDAPGATE_SECRET_KEY" ]; then
+          export PROXY__SECRET_KEY="$$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          echo "Generated random PROXY__SECRET_KEY for this session"
+        fi
+        exec ldapgate serve --config /app/ldapgate.yaml

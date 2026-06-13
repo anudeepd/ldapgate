@@ -2,6 +2,8 @@ dn: ou=users,dc=example,dc=org
 objectClass: organizationalUnit
 ou: users
 
+# DEV ONLY: plaintext password for local OpenLDAP testing.
+# The osixia/openldap image hashes this on import. Never use in production.
 dn: uid=alice,ou=users,dc=example,dc=org
 objectClass: inetOrgPerson
 objectClass: posixAccount

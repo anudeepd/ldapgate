@@ -18,6 +18,7 @@ def _base_settings(**kwargs) -> LDAPSettings:
         bind_dn="CN=svc,CN=Users,DC=example,DC=com",
         bind_password="secret",
         base_dn="DC=example,DC=com",
+        allowed_users=["alice"],
     )
     defaults.update(kwargs)
     return LDAPSettings(**defaults)
@@ -35,8 +36,8 @@ def pem_files(tmp_path):
 
 
 def test_build_tls_returns_none_by_default():
-    """No TLS fields set → _build_tls returns None."""
-    config = _base_settings()
+    """No TLS fields set on plain ldap:// → _build_tls returns None."""
+    config = _base_settings(url="ldap://dc.example.com:389")
     assert _build_tls(config) is None
 
 
@@ -70,6 +71,14 @@ def test_build_tls_validate_none():
     assert tls.validate == ssl.CERT_NONE
 
 
+def test_build_tls_ldaps_triggers_tls_object():
+    """ldaps:// → returns Tls with REQUIRED validation even without cert files."""
+    config = _base_settings()
+    tls = _build_tls(config)
+    assert isinstance(tls, Tls)
+    assert tls.validate == ssl.CERT_REQUIRED
+
+
 def test_build_tls_starttls_triggers_tls_object():
     """use_starttls=True → returns Tls even without cert files."""
     config = _base_settings(use_starttls=True)
@@ -82,14 +91,42 @@ def test_authenticator_uses_tls_server(pem_files):
     config = _base_settings(tls_ca_cert_file=pem_files["ca"])
     with patch("ldapgate.ldap.Server") as MockServer:
         LDAPAuthenticator(config)
-        call_kwargs = MockServer.call_args.kwargs
-        assert isinstance(call_kwargs["tls"], Tls)
+        # Server is called twice (once for self.server, once for pool)
+        calls = MockServer.call_args_list
+        assert len(calls) >= 1
+        for call in calls:
+            call_kwargs = call.kwargs
+            assert isinstance(call_kwargs.get("tls"), Tls)
+
+
+def test_authenticator_referral_following_reuses_tls(pem_files):
+    """Allowed referral searches should reuse the authenticator TLS config."""
+    config = _base_settings(
+        tls_ca_cert_file=pem_files["ca"],
+        follow_referrals=True,
+        referral_allowed_hosts=["dc2.example.com"],
+    )
+    with patch("ldapgate.ldap.Server") as MockServer, patch("ldapgate.ldap.Connection") as MockConnection:
+        auth = LDAPAuthenticator(config)
+        MockServer.reset_mock()
+        ref_conn = MockConnection.return_value
+        ref_conn.entries = ["entry"]
+        ref_conn.result = {"description": "success"}
+        conn = type("Conn", (), {"result": {"referrals": ["ldaps://dc2.example.com/DC=example,DC=com"]}, "entries": []})()
+
+        auth._follow_search_referrals(conn, config.base_dn, "(uid=alice)", "SUBTREE")
+
+        assert MockServer.call_args.kwargs["tls"] is auth.tls
+        assert conn.entries == ["entry"]
 
 
 def test_authenticator_no_tls_when_defaults():
-    """LDAPAuthenticator passes tls=None to Server when no TLS fields are set."""
-    config = _base_settings()
+    """LDAPAuthenticator passes tls=None to Server when no TLS fields are set on plain ldap://."""
+    config = _base_settings(url="ldap://dc.example.com:389", block_plaintext_ldap=False)
     with patch("ldapgate.ldap.Server") as MockServer:
         LDAPAuthenticator(config)
-        call_kwargs = MockServer.call_args.kwargs
-        assert call_kwargs["tls"] is None
+        calls = MockServer.call_args_list
+        assert len(calls) >= 1
+        for call in calls:
+            call_kwargs = call.kwargs
+            assert call_kwargs.get("tls") is None
