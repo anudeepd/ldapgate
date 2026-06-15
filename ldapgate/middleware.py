@@ -231,7 +231,10 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
                 response.headers[key] = value
         # Preserve any existing CSP (e.g. nonce from login form) rather than overwriting
         if "content-security-policy" not in {k.lower() for k in response.headers}:
-            csp = "default-src 'self'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+            csp = (
+                "default-src 'self'; form-action 'self'; script-src 'self'; "
+                "style-src 'self'; img-src 'self' data:; font-src 'self' data:"
+            )
             response.headers["Content-Security-Policy"] = csp
         if "permissions-policy" not in {k.lower() for k in response.headers}:
             response.headers["Permissions-Policy"] = (

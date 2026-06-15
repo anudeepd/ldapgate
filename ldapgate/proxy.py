@@ -305,10 +305,14 @@ def _add_security_headers(response: Response, nonce: Optional[str] = None, confi
                 f"form-action 'self'; "
                 f"script-src 'self' 'nonce-{nonce}'; "
                 f"style-src 'self' 'nonce-{nonce}'; "
-                f"img-src 'self' data:"
+                f"img-src 'self' data:; "
+                f"font-src 'self' data:"
             )
         else:
-            csp = "default-src 'self'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+            csp = (
+                "default-src 'self'; form-action 'self'; script-src 'self'; "
+                "style-src 'self'; img-src 'self' data:; font-src 'self' data:"
+            )
         response.headers["Content-Security-Policy"] = csp
     if config and config.proxy.secure_cookies and config.proxy.hsts_max_age > 0:
         response.headers["Strict-Transport-Security"] = (

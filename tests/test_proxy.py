@@ -61,6 +61,7 @@ def test_login_page_has_security_headers(client):
     assert resp.headers["X-Frame-Options"] == "DENY"
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
     assert resp.headers["Cache-Control"] == "no-store, no-cache, must-revalidate, max-age=0"
+    assert "font-src 'self' data:" in resp.headers["Content-Security-Policy"]
 
 
 def test_login_page_rejects_unknown_error_param(client):
@@ -195,6 +196,7 @@ def test_create_login_router_has_security_headers():
         assert resp.status_code == 200
         assert resp.headers["X-Frame-Options"] == "DENY"
         assert resp.headers["X-Content-Type-Options"] == "nosniff"
+        assert "font-src 'self' data:" in resp.headers["Content-Security-Policy"]
 
 
 def test_proxy_app_requires_backend_url():
@@ -222,6 +224,7 @@ def test_middleware_does_not_skip_app_assets_by_default():
     with TestClient(app) as tc:
         resp = tc.get("/assets/app.js")
         assert resp.status_code == 401
+        assert "font-src 'self' data:" in resp.headers["Content-Security-Policy"]
 
 
 def test_middleware_basic_auth_success_cache_reuses_ldap_auth():
