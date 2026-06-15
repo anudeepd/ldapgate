@@ -379,3 +379,44 @@ class BasicAuthRateLimiter:
                 self._user_lockouts.pop(username_lower, None)
 
         self._with_shared_state(_clear)
+
+
+class BasicAuthSuccessCache:
+    """Short-lived in-memory cache for successful Basic auth credentials."""
+
+    _PRUNE_INTERVAL = 60
+
+    def __init__(self, ttl_seconds: int = 60) -> None:
+        self.ttl_seconds = max(0, ttl_seconds)
+        self._entries: dict[tuple[str, str], float] = {}
+        self._last_prune = 0.0
+
+    @staticmethod
+    def _key(username: str, password: str) -> tuple[str, str]:
+        return username.strip().lower(), hashlib.sha256(password.encode()).hexdigest()
+
+    def is_valid(self, username: str, password: str) -> bool:
+        if self.ttl_seconds <= 0:
+            return False
+        now = time.time()
+        self._prune(now)
+        expires_at = self._entries.get(self._key(username, password))
+        return expires_at is not None and expires_at > now
+
+    def record_success(self, username: str, password: str) -> None:
+        if self.ttl_seconds <= 0:
+            return
+        now = time.time()
+        self._prune(now)
+        self._entries[self._key(username, password)] = now + self.ttl_seconds
+
+    def clear(self, username: str, password: str) -> None:
+        self._entries.pop(self._key(username, password), None)
+
+    def _prune(self, now: float) -> None:
+        if now - self._last_prune < self._PRUNE_INTERVAL:
+            return
+        self._last_prune = now
+        for key, expires_at in list(self._entries.items()):
+            if expires_at <= now:
+                del self._entries[key]

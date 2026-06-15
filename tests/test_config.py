@@ -153,6 +153,7 @@ def test_proxy_settings_defaults():
     assert settings.login_path == "/_auth/login"
     assert settings.app_name == "ldapgate"
     assert settings.static_paths == []
+    assert settings.basic_auth_cache_ttl == 60
 
 
 def test_ldap_settings_invalid_tls_validate():

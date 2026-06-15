@@ -225,6 +225,11 @@ class ProxySettings(BaseModel):
                     "When set, lockout counters are shared across all uvicorn workers. "
                     "When unset, rate limiting is per-process.",
     )
+    basic_auth_cache_ttl: int = Field(
+        60, ge=0,
+        description="Seconds to cache successful Basic auth checks in memory. "
+                    "Set to 0 to disable. Useful for chatty WebDAV clients.",
+    )
 
     @field_validator("backend_url")
     @classmethod

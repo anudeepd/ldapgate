@@ -11,7 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
-from ldapgate._auth_utils import BasicAuthRateLimiter, _is_ip_in_networks, _is_safe_host, _is_trusted_host, get_client_ip, parse_basic_auth
+from ldapgate._auth_utils import BasicAuthRateLimiter, BasicAuthSuccessCache, _is_ip_in_networks, _is_safe_host, _is_trusted_host, get_client_ip, parse_basic_auth
 from ldapgate.config import LDAPConfig
 from ldapgate.ldap import LDAPAuthenticator
 from ldapgate.sessions import SessionManager
@@ -80,6 +80,9 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
             lockout_seconds=config.proxy.rate_limit_lockout_seconds,
             state_path=config.proxy.rate_limit_state_path,
         )
+        self._basic_auth_cache = BasicAuthSuccessCache(
+            ttl_seconds=config.proxy.basic_auth_cache_ttl,
+        )
 
     async def dispatch(self, request: Request, call_next) -> Response:
         """Middleware dispatch handler.
@@ -120,10 +123,16 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
             if self._basic_auth_limiter.is_locked_out(client_ip, username=creds[0] if creds else None):
                 log.warning("Basic auth: rejecting locked-out IP %s", client_ip)
                 return self._add_security_headers(_401)
-            if creds and await self.ldap_auth.authenticate(creds[0], creds[1]):
+            if creds and self._basic_auth_cache.is_valid(creds[0], creds[1]):
                 self._basic_auth_limiter.record_success(client_ip, creds[0])
                 username = creds[0]
+            elif creds and await self.ldap_auth.authenticate(creds[0], creds[1]):
+                self._basic_auth_limiter.record_success(client_ip, creds[0])
+                self._basic_auth_cache.record_success(creds[0], creds[1])
+                username = creds[0]
             else:
+                if creds:
+                    self._basic_auth_cache.clear(creds[0], creds[1])
                 self._basic_auth_limiter.record_failure(client_ip, creds[0] if creds else None)
                 return self._add_security_headers(_401)
 

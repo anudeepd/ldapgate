@@ -113,6 +113,9 @@ proxy:
   rate_limit_max_failures: 5
   rate_limit_window_seconds: 300
   rate_limit_lockout_seconds: 60
+  # Cache successful HTTP Basic auth checks briefly. This avoids one LDAP bind
+  # per tiny WebDAV request from clients like macOS Finder. Set 0 to disable.
+  basic_auth_cache_ttl: 60
 
   # Optional shared state for multi-worker deployments.
   # revocation_path: /var/lib/ldapgate/revoked.json

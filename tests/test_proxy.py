@@ -1,5 +1,6 @@
 """Tests for proxy application."""
 
+import base64
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -221,6 +222,54 @@ def test_middleware_does_not_skip_app_assets_by_default():
     with TestClient(app) as tc:
         resp = tc.get("/assets/app.js")
         assert resp.status_code == 401
+
+
+def test_middleware_basic_auth_success_cache_reuses_ldap_auth():
+    """Chatty WebDAV clients should not force an LDAP bind on every request."""
+    from ldapgate.middleware import LDAPAuthMiddleware
+
+    config = _test_config()
+    config.proxy.basic_auth_cache_ttl = 60
+    ldap_auth = SimpleNamespace(authenticate=AsyncMock(return_value=True))
+    app = FastAPI()
+
+    @app.get("/")
+    async def root():
+        return {"ok": True}
+
+    app.add_middleware(LDAPAuthMiddleware, config=config, ldap_auth=ldap_auth)
+    auth = base64.b64encode(b"alice:secret").decode()
+
+    with TestClient(app) as tc:
+        for _ in range(2):
+            resp = tc.get("/", headers={"Authorization": f"Basic {auth}"})
+            assert resp.status_code == 200
+
+    assert ldap_auth.authenticate.await_count == 1
+
+
+def test_middleware_basic_auth_cache_can_be_disabled():
+    """A zero TTL keeps the old per-request Basic auth validation behavior."""
+    from ldapgate.middleware import LDAPAuthMiddleware
+
+    config = _test_config()
+    config.proxy.basic_auth_cache_ttl = 0
+    ldap_auth = SimpleNamespace(authenticate=AsyncMock(return_value=True))
+    app = FastAPI()
+
+    @app.get("/")
+    async def root():
+        return {"ok": True}
+
+    app.add_middleware(LDAPAuthMiddleware, config=config, ldap_auth=ldap_auth)
+    auth = base64.b64encode(b"alice:secret").decode()
+
+    with TestClient(app) as tc:
+        for _ in range(2):
+            resp = tc.get("/", headers={"Authorization": f"Basic {auth}"})
+            assert resp.status_code == 200
+
+    assert ldap_auth.authenticate.await_count == 2
 
 
 def test_logout_rejects_cross_origin():

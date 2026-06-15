@@ -132,6 +132,8 @@ The middleware handles both browser and WebDAV clients on the same app instance:
 
 No extra routes or config needed — if a request arrives without a session cookie and without `Accept: text/html`, the middleware issues a `401` with a `WWW-Authenticate: Basic` header. The client sends credentials, the middleware validates against LDAP, and the request proceeds.
 
+Successful Basic auth checks are cached briefly in memory by default (`proxy.basic_auth_cache_ttl: 60`) so chatty WebDAV clients like macOS Finder do not force a fresh LDAP bind for every metadata request. Set it to `0` to disable the cache.
+
 `allowed_users` and `group_dn` apply to both flows — a user blocked by those settings is rejected regardless of whether they authenticated via cookie or Basic auth.
 
 **Example — xwing file server with WebDAV:**
