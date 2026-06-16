@@ -15,6 +15,7 @@ from ldapgate.proxy import (
     _add_security_headers,
     _https_required_response,
     _secure_transport_required,
+    _session_cookie_name,
     _set_session_cookie,
     create_login_router,
     create_proxy_app,
@@ -124,6 +125,15 @@ def test_secure_session_cookie_does_not_require_python_314():
     )
     assert "__Host-ldapgate_session=abc" in response.headers["set-cookie"]
     assert "Secure" in response.headers["set-cookie"]
+
+
+def test_session_cookie_name_uses_configured_base_name():
+    config = _test_config()
+    config.proxy.session_cookie_name = "torrus_session"
+    assert _session_cookie_name(config) == "torrus_session"
+
+    config.proxy.secure_cookies = True
+    assert _session_cookie_name(config) == "__Host-torrus_session"
 
 
 def _make_mock_http_client(**kwargs):

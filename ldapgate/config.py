@@ -192,6 +192,13 @@ class ProxySettings(BaseModel):
         "lax",
         description="SameSite attribute for session cookies: lax (default) or strict",
     )
+    session_cookie_name: str = Field(
+        "ldapgate_session",
+        description=(
+            "Base session cookie name. Use a distinct value per localhost app "
+            "because browser cookies are scoped by host/path, not port."
+        ),
+    )
     max_sessions_per_user: int = Field(
         0, ge=0,
         description="Maximum concurrent sessions per user (0 = unlimited). "
@@ -244,6 +251,15 @@ class ProxySettings(BaseModel):
         v = v.lower()
         if v not in {"lax", "strict"}:
             raise ValueError("cookie_samesite must be 'lax' or 'strict'")
+        return v
+
+    @field_validator("session_cookie_name")
+    @classmethod
+    def _validate_session_cookie_name(cls, v: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", v):
+            raise ValueError("session_cookie_name must be a valid cookie name")
+        if v.startswith("__Host-"):
+            raise ValueError("session_cookie_name must not include the __Host- prefix")
         return v
 
     @field_validator("secret_key")

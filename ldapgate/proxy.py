@@ -382,6 +382,14 @@ def _set_session_cookie(
     response.set_cookie(**kwargs)
 
 
+def _session_cookie_name(config: LDAPConfig) -> str:
+    """Return the configured session cookie name with __Host- prefix if needed."""
+    name = config.proxy.session_cookie_name
+    if config.proxy.secure_cookies:
+        return f"__Host-{name}"
+    return name
+
+
 class _BodyTooLarge(Exception):
     """Raised when the streaming request body exceeds max_body_size."""
     pass
@@ -527,9 +535,7 @@ class ProxyApp:
 
     def _cookie_name(self) -> str:
         """Return the session cookie name, with __Host- prefix when secure."""
-        if self.config.proxy.secure_cookies:
-            return f"__Host-{SessionManager.COOKIE_NAME}"
-        return SessionManager.COOKIE_NAME
+        return _session_cookie_name(self.config)
 
     def _setup_routes(self):
         """Set up FastAPI routes."""
@@ -826,7 +832,7 @@ class ProxyApp:
             # Only strip the ldapgate session cookie, forward other cookies
             cookie_val = request.headers.get("cookie")
             if cookie_val:
-                cookie_self = SessionManager.COOKIE_NAME
+                cookie_self = self.config.proxy.session_cookie_name
                 cookie_host = f"__Host-{cookie_self}"
                 filtered = [
                     c.strip() for c in cookie_val.split(";")
@@ -1017,7 +1023,7 @@ def create_login_router(
         lockout_seconds=config.proxy.rate_limit_lockout_seconds,
         state_path=config.proxy.rate_limit_state_path,
     )
-    _cookie_name = f"__Host-{SessionManager.COOKIE_NAME}" if config.proxy.secure_cookies else SessionManager.COOKIE_NAME
+    _cookie_name = _session_cookie_name(config)
 
     def _render_login(redirect: str = "", error: str = "", client_ip: str = "") -> Response:
         csrf_token = session_manager.generate_csrf_token(client_ip=client_ip)

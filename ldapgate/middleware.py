@@ -254,9 +254,10 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
 
     @property
     def _cookie_name(self) -> str:
+        name = self.config.proxy.session_cookie_name
         if self.config.proxy.secure_cookies:
-            return f"__Host-{SessionManager.COOKIE_NAME}"
-        return SessionManager.COOKIE_NAME
+            return f"__Host-{name}"
+        return name
 
     def _should_skip_auth(self, path: str) -> bool:
         """Check if path should skip authentication.

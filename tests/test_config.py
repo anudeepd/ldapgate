@@ -237,6 +237,30 @@ def test_cookie_samesite_validation():
     assert settings.cookie_samesite == "strict"
 
 
+def test_session_cookie_name_validation():
+    """Session cookie names can be app-specific but must be valid names."""
+    settings = ProxySettings(
+        backend_url="http://localhost:8080",
+        secret_key="x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!",
+        session_cookie_name="torrus_session",
+    )
+    assert settings.session_cookie_name == "torrus_session"
+
+    with pytest.raises(ValueError):
+        ProxySettings(
+            backend_url="http://localhost:8080",
+            secret_key="x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!",
+            session_cookie_name="bad name",
+        )
+
+    with pytest.raises(ValueError):
+        ProxySettings(
+            backend_url="http://localhost:8080",
+            secret_key="x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!",
+            session_cookie_name="__Host-torrus_session",
+        )
+
+
 def test_pool_size_default():
     """Test that pool_size defaults to 1."""
     settings = LDAPSettings(
