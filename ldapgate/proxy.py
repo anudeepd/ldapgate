@@ -38,12 +38,12 @@ _HEADER_UNSAFE_CHARS = str.maketrans({"\r": "", "\n": ""})
 _SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
-    "Cross-Origin-Opener-Policy": "same-origin",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     "Pragma": "no-cache",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
 }
+_COOP_HEADER = ("Cross-Origin-Opener-Policy", "same-origin")
 
 # Headers that must not be forwarded between proxy hops (RFC 2616 §13.5.1)
 _HOP_BY_HOP = frozenset({
@@ -291,10 +291,19 @@ def _is_safe_referer(referer: str, host: str, trusted_hosts: list[str] | None = 
         return False
 
 
-def _add_security_headers(response: Response, nonce: Optional[str] = None, config: Optional[LDAPConfig] = None) -> Response:
+def _add_security_headers(
+    response: Response,
+    nonce: Optional[str] = None,
+    config: Optional[LDAPConfig] = None,
+    scheme: Optional[str] = None,
+) -> Response:
     """Add security headers to a response."""
     response_headers_lower = {k.lower() for k in response.headers}
     for key, value in _SECURITY_HEADERS.items():
+        if key.lower() not in response_headers_lower:
+            response.headers[key] = value
+    if scheme == "https":
+        key, value = _COOP_HEADER
         if key.lower() not in response_headers_lower:
             response.headers[key] = value
     # Preserve any existing CSP (e.g. nonce from login form) rather than overwriting
@@ -477,9 +486,15 @@ class ProxyApp:
         self.app = FastAPI(lifespan=lifespan)
         self._setup_routes()
 
-    def _add_security_headers(self, response: Response, nonce: Optional[str] = None) -> Response:
+    def _add_security_headers(
+        self,
+        response: Response,
+        nonce: Optional[str] = None,
+        request: Optional[Request] = None,
+    ) -> Response:
         """Add security headers including CSP nonce and HSTS to a response."""
-        return _add_security_headers(response, nonce=nonce, config=self.config)
+        scheme = self._get_scheme(request) if request is not None else None
+        return _add_security_headers(response, nonce=nonce, config=self.config, scheme=scheme)
 
     def _render_login_form(
         self, template, redirect: str = "", error: str = "", client_ip: str = "",

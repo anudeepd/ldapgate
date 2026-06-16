@@ -6,12 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from starlette.testclient import TestClient as StarletteTestClient
 
 from ldapgate.config import LDAPConfig, LDAPSettings, ProxySettings
 from ldapgate.proxy import (
     ProxyApp,
+    _add_security_headers,
     _https_required_response,
     _secure_transport_required,
     _set_session_cookie,
@@ -60,8 +61,18 @@ def test_login_page_has_security_headers(client):
     assert resp.status_code == 200
     assert resp.headers["X-Frame-Options"] == "DENY"
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    assert "Cross-Origin-Opener-Policy" not in resp.headers
     assert resp.headers["Cache-Control"] == "no-store, no-cache, must-revalidate, max-age=0"
     assert "font-src 'self' data:" in resp.headers["Content-Security-Policy"]
+
+
+def test_coop_header_is_only_added_for_https_scheme():
+    """COOP is ignored on plain HTTP and creates console noise there."""
+    http_response = _add_security_headers(Response(), config=_test_config(), scheme="http")
+    assert "Cross-Origin-Opener-Policy" not in http_response.headers
+
+    https_response = _add_security_headers(Response(), config=_test_config(), scheme="https")
+    assert https_response.headers["Cross-Origin-Opener-Policy"] == "same-origin"
 
 
 def test_login_page_rejects_unknown_error_param(client):
@@ -224,6 +235,7 @@ def test_middleware_does_not_skip_app_assets_by_default():
     with TestClient(app) as tc:
         resp = tc.get("/assets/app.js")
         assert resp.status_code == 401
+        assert "Cross-Origin-Opener-Policy" not in resp.headers
         assert "font-src 'self' data:" in resp.headers["Content-Security-Policy"]
 
 

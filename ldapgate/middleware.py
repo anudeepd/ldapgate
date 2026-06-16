@@ -35,11 +35,11 @@ _401 = Response(
 _SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
-    "Cross-Origin-Opener-Policy": "same-origin",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     "Pragma": "no-cache",
 }
+_COOP_HEADER = ("Cross-Origin-Opener-Policy", "same-origin")
 
 
 class LDAPAuthMiddleware(BaseHTTPMiddleware):
@@ -98,11 +98,13 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         Returns:
             Response
         """
+        add_headers = lambda response: self._add_security_headers(response, request=request)
+
         # Enforce HTTPS when secure_cookies is enabled
         if self.config.proxy.secure_cookies:
             scheme = self._get_scheme(request)
             if scheme != "https":
-                return self._add_security_headers(Response(
+                return add_headers(Response(
                     content="HTTPS required",
                     status_code=421,
                     media_type="text/plain",
@@ -111,7 +113,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         # Skip auth for login endpoints and static assets
         if self._should_skip_auth(request.url.path):
             response = await call_next(request)
-            return self._add_security_headers(response)
+            return add_headers(response)
 
         username: Optional[str] = None
 
@@ -122,7 +124,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
             creds = parse_basic_auth(auth_header)
             if self._basic_auth_limiter.is_locked_out(client_ip, username=creds[0] if creds else None):
                 log.warning("Basic auth: rejecting locked-out IP %s", client_ip)
-                return self._add_security_headers(_401)
+                return add_headers(_401)
             if creds and self._basic_auth_cache.is_valid(creds[0], creds[1]):
                 self._basic_auth_limiter.record_success(client_ip, creds[0])
                 username = creds[0]
@@ -134,7 +136,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
                 if creds:
                     self._basic_auth_cache.clear(creds[0], creds[1])
                 self._basic_auth_limiter.record_failure(client_ip, creds[0] if creds else None)
-                return self._add_security_headers(_401)
+                return add_headers(_401)
 
         # Fall back to session cookie
         if username is None:
@@ -147,12 +149,12 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
             # Non-browser clients won't follow a redirect — give them a 401 challenge
             accept = request.headers.get("accept", "")
             if "text/html" not in accept:
-                return self._add_security_headers(_401)
+                return add_headers(_401)
             # Redirect browsers to login with original URL as redirect target
             redirect_url = request.url.path
             if request.url.query:
                 redirect_url += f"?{request.url.query}"
-            return self._add_security_headers(RedirectResponse(
+            return add_headers(RedirectResponse(
                 url=f"{self.config.proxy.login_path}?redirect={quote(redirect_url, safe='')}",
                 status_code=302,
             ))
@@ -163,13 +165,13 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
             try:
                 cl = int(content_length)
                 if cl < 0 or cl > self.config.proxy.max_body_size:
-                    return self._add_security_headers(Response(
+                    return add_headers(Response(
                         content="Request body too large",
                         status_code=413,
                         media_type="text/plain",
                     ))
             except ValueError:
-                return self._add_security_headers(Response(
+                return add_headers(Response(
                     content="Invalid Content-Length",
                     status_code=400,
                     media_type="text/plain",
@@ -211,7 +213,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
 
         # Call next middleware/route
         response = await call_next(request)
-        return self._add_security_headers(response)
+        return add_headers(response)
 
     def _get_scheme(self, request: Request) -> str:
         """Determine the effective protocol scheme for the request.
@@ -224,9 +226,13 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
             return request.headers.get("x-forwarded-proto", request.url.scheme)
         return request.url.scheme
 
-    def _add_security_headers(self, response: Response) -> Response:
+    def _add_security_headers(self, response: Response, request: Optional[Request] = None) -> Response:
         """Add security headers to a response."""
         for key, value in _SECURITY_HEADERS.items():
+            if key.lower() not in response.headers:
+                response.headers[key] = value
+        if request is not None and self._get_scheme(request) == "https":
+            key, value = _COOP_HEADER
             if key.lower() not in response.headers:
                 response.headers[key] = value
         # Preserve any existing CSP (e.g. nonce from login form) rather than overwriting

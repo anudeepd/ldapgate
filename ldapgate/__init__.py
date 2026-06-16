@@ -1,6 +1,6 @@
 """ldapgate - LDAP/AD authentication proxy and FastAPI middleware"""
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 __all__ = [
     "LDAPAuthenticator",
