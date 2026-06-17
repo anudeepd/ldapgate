@@ -20,6 +20,8 @@ from ldapgate.proxy import (
     create_login_router,
     create_proxy_app,
 )
+from ldapgate.middleware import add_ldap_auth
+from ldapgate.sessions import SessionManager
 
 
 def TestClient(*args, **kwargs):
@@ -218,6 +220,15 @@ def test_create_login_router_has_security_headers():
         assert resp.headers["X-Frame-Options"] == "DENY"
         assert resp.headers["X-Content-Type-Options"] == "nosniff"
         assert "font-src 'self' data:" in resp.headers["Content-Security-Policy"]
+
+
+def test_add_ldap_auth_returns_shared_session_manager():
+    config = _test_config()
+    app = FastAPI()
+
+    session_manager = add_ldap_auth(app, config)
+
+    assert isinstance(session_manager, SessionManager)
 
 
 def test_proxy_app_requires_backend_url():

@@ -276,7 +276,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         return any(path == prefix or path.startswith(prefix) for prefix in static_prefixes)
 
 
-def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str] = None) -> None:
+def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str] = None) -> SessionManager:
     """Add LDAP auth to a FastAPI app: login routes + session middleware.
 
     Registers the login form (GET/POST) on the app and attaches
@@ -287,6 +287,9 @@ def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str]
         config: LDAPConfig instance
         template_path: Optional path to a custom Jinja2 login template file.
                        If omitted, uses the bundled ldapgate template.
+
+    Returns:
+        Shared SessionManager used by both the login router and middleware.
     """
     from ldapgate.proxy import create_login_router
     # Shared LDAP authenticator to avoid double connection pool
@@ -313,3 +316,4 @@ def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str]
         LDAPAuthMiddleware, config=config, rate_limiter=shared_limiter,
         session_manager=shared_session_mgr, ldap_auth=shared_ldap_auth,
     )
+    return shared_session_mgr
