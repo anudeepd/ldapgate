@@ -53,8 +53,10 @@ _HOP_BY_HOP = frozenset({
 })
 
 
-def _username_log(username: str) -> str:
+def _username_log(username: str, mask: bool = True) -> str:
     """Mask username for privacy in logs: first char + SHA-256 suffix."""
+    if not mask:
+        return username.replace("\r", "").replace("\n", "")
     h = hashlib.sha256(username.encode()).hexdigest()[:8]
     safe = username.strip()
     prefix = safe[0] if safe else "?"
@@ -460,6 +462,7 @@ class ProxyApp:
             window_seconds=config.proxy.rate_limit_window_seconds,
             lockout_seconds=config.proxy.rate_limit_lockout_seconds,
             state_path=config.proxy.rate_limit_state_path,
+            mask_usernames_in_logs=config.proxy.mask_usernames_in_logs,
         )
         self._basic_auth_cache = BasicAuthSuccessCache(
             ttl_seconds=config.proxy.basic_auth_cache_ttl,
@@ -629,7 +632,7 @@ class ProxyApp:
 
             self._basic_auth_limiter.record_success(client_ip, username)
             log.info("Successful login for user '%s' from IP %s",
-                     _username_log(username), client_ip)
+                     _username_log(username, self.config.proxy.mask_usernames_in_logs), client_ip)
 
             # Revoke any existing session cookie to prevent session fixation
             old_cookie = request.cookies.get(self._cookie_name())
@@ -1022,6 +1025,7 @@ def create_login_router(
         window_seconds=config.proxy.rate_limit_window_seconds,
         lockout_seconds=config.proxy.rate_limit_lockout_seconds,
         state_path=config.proxy.rate_limit_state_path,
+        mask_usernames_in_logs=config.proxy.mask_usernames_in_logs,
     )
     _cookie_name = _session_cookie_name(config)
 
@@ -1098,7 +1102,7 @@ def create_login_router(
 
         _login_limiter.record_success(client_ip, username)
         log.info("Successful login for user '%s' from IP %s",
-                 _username_log(username), client_ip)
+                 _username_log(username, config.proxy.mask_usernames_in_logs), client_ip)
 
         # Revoke existing session cookie to prevent session fixation
         old_cookie = request.cookies.get(_cookie_name)

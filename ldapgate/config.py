@@ -164,6 +164,10 @@ class ProxySettings(BaseModel):
     login_path: str = Field("/_auth/login", description="Login page path")
     logout_path: str = Field("/_auth/logout", description="Logout page path")
     app_name: str = Field("ldapgate", description="Application name for login form")
+    mask_usernames_in_logs: bool = Field(
+        True,
+        description="Mask usernames in ldapgate logs. Set false only when full usernames are required for operations.",
+    )
     trusted_proxies: List[str] = Field(
         default_factory=list,
         description="List of trusted proxy IPs/CIDRs for X-Forwarded-For (e.g., ['127.0.0.1', '10.0.0.0/8'])",

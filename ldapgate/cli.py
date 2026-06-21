@@ -1,6 +1,7 @@
 """CLI for ldapgate reverse proxy."""
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -40,6 +41,19 @@ def cli():
     pass
 
 
+def _configure_logging(log_file: Path | None) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if log_file:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=handlers,
+    )
+
+
 @cli.command()
 @click.option(
     "--config",
@@ -68,7 +82,9 @@ def cli():
     is_flag=True,
     help="Enable auto-reload on code changes",
 )
-def serve(config: Path, host: str, port: int, backend: str, reload: bool):
+@click.option("--log-file", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Append application logs to this file.")
+def serve(config: Path, host: str, port: int, backend: str, reload: bool, log_file: Path | None):
     """Start ldapgate reverse proxy server.
 
     Example:
@@ -76,6 +92,7 @@ def serve(config: Path, host: str, port: int, backend: str, reload: bool):
         ldapgate serve --backend http://localhost:3923
     """
     try:
+        _configure_logging(log_file)
         cfg = load_config(config)
 
         if host:
@@ -105,6 +122,8 @@ def serve(config: Path, host: str, port: int, backend: str, reload: bool):
                 reload_cfg["host"] = host
             if port:
                 reload_cfg["port"] = port
+            if log_file:
+                reload_cfg["log_file"] = str(log_file)
             fd, tmp_path = tempfile.mkstemp(
                 suffix=".json", prefix="ldapgate_reload_"
             )
@@ -119,6 +138,7 @@ def serve(config: Path, host: str, port: int, backend: str, reload: bool):
                 port=cfg.proxy.listen_port,
                 reload=True,
                 log_level="info",
+                log_config=None,
             )
         else:
             app = create_proxy_app(cfg)
@@ -127,6 +147,7 @@ def serve(config: Path, host: str, port: int, backend: str, reload: bool):
                 host=cfg.proxy.listen_host,
                 port=cfg.proxy.listen_port,
                 log_level="info",
+                log_config=None,
             )
 
     except FileNotFoundError as e:
@@ -161,6 +182,8 @@ def _reload_app_factory():
                 pass
 
     config_path = reload_cfg.get("config")
+    log_file = reload_cfg.get("log_file")
+    _configure_logging(Path(log_file) if log_file else None)
     try:
         cfg = load_config(config_path)
     except Exception as e:

@@ -152,8 +152,17 @@ def test_proxy_settings_defaults():
     assert settings.user_header == "X-Forwarded-User"
     assert settings.login_path == "/_auth/login"
     assert settings.app_name == "ldapgate"
+    assert settings.mask_usernames_in_logs is True
     assert settings.static_paths == []
     assert settings.basic_auth_cache_ttl == 60
+
+
+def test_proxy_settings_can_log_full_usernames():
+    settings = ProxySettings(
+        secret_key="x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!",
+        mask_usernames_in_logs=False,
+    )
+    assert settings.mask_usernames_in_logs is False
 
 
 def test_ldap_settings_invalid_tls_validate():

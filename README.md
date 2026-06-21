@@ -55,6 +55,7 @@ proxy:
   login_path: /_auth/login
   logout_path: /_auth/logout
   app_name: MyApp
+  mask_usernames_in_logs: true                    # set false to log full usernames
   secure_cookies: false                              # set true when behind HTTPS
 ```
 

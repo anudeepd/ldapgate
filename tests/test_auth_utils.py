@@ -3,6 +3,11 @@
 from ldapgate._auth_utils import BasicAuthRateLimiter
 
 
+def test_rate_limiter_username_log_masking_is_configurable():
+    assert BasicAuthRateLimiter()._username_for_log("alice") != "alice"
+    assert BasicAuthRateLimiter(mask_usernames_in_logs=False)._username_for_log("alice") == "alice"
+
+
 def test_rate_limiter_shared_state_path_shares_lockouts(tmp_path):
     """Separate limiter instances should share failures through state_path."""
     state_path = tmp_path / "rate-limit.json"

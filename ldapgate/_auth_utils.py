@@ -128,6 +128,7 @@ class BasicAuthRateLimiter:
         window_seconds: int = 300,
         lockout_seconds: int = 60,
         state_path: Optional[str] = None,
+        mask_usernames_in_logs: bool = True,
     ) -> None:
         self.MAX_FAILURES = max_failures
         self.WINDOW_SECONDS = window_seconds
@@ -142,9 +143,11 @@ class BasicAuthRateLimiter:
         self._user_lockouts: dict[str, float] = {}
         self._last_prune: float = 0.0
         self._state_path = Path(state_path) if state_path else None
+        self._mask_usernames_in_logs = mask_usernames_in_logs
 
-    @staticmethod
-    def _mask_user(username: str) -> str:
+    def _username_for_log(self, username: str) -> str:
+        if not self._mask_usernames_in_logs:
+            return username.replace("\r", "").replace("\n", "")
         h = hashlib.sha256(username.encode()).hexdigest()[:8]
         safe = username.strip()
         prefix = safe[0] if safe else "?"
@@ -365,7 +368,7 @@ class BasicAuthRateLimiter:
                 if len(user_window) >= self.MAX_FAILURES:
                     self._user_lockouts[username_lower] = now + self.LOCKOUT_SECONDS
                     log.warning("Basic auth: user %s locked out after %d failures",
-                               self._mask_user(username_lower), len(user_window))
+                               self._username_for_log(username_lower), len(user_window))
 
         self._with_shared_state(_record)
 

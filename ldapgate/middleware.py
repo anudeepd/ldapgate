@@ -19,8 +19,10 @@ from ldapgate.sessions import SessionManager
 log = logging.getLogger(__name__)
 
 
-def _username_log(username: str) -> str:
+def _username_log(username: str, mask: bool = True) -> str:
     """Mask username for privacy in logs: first char + SHA-256 suffix."""
+    if not mask:
+        return username.replace("\r", "").replace("\n", "")
     h = hashlib.sha256(username.encode()).hexdigest()[:8]
     safe = username.strip()
     prefix = safe[0] if safe else "?"
@@ -79,6 +81,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
             window_seconds=config.proxy.rate_limit_window_seconds,
             lockout_seconds=config.proxy.rate_limit_lockout_seconds,
             state_path=config.proxy.rate_limit_state_path,
+            mask_usernames_in_logs=config.proxy.mask_usernames_in_logs,
         )
         self._basic_auth_cache = BasicAuthSuccessCache(
             ttl_seconds=config.proxy.basic_auth_cache_ttl,
@@ -179,7 +182,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
 
         # Store username in request state for downstream use
         request.state.user = username
-        log.info("Authenticated user '%s' from IP %s", _username_log(username), get_client_ip(request, self.config.proxy.trusted_proxies))
+        log.info("Authenticated user '%s' from IP %s", _username_log(username, self.config.proxy.mask_usernames_in_logs), get_client_ip(request, self.config.proxy.trusted_proxies))
 
         # Inject user header into request scope (MutableHeaders modifies scope in place)
         mutable_headers = MutableHeaders(scope=request.scope)
@@ -300,6 +303,7 @@ def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str]
         window_seconds=config.proxy.rate_limit_window_seconds,
         lockout_seconds=config.proxy.rate_limit_lockout_seconds,
         state_path=config.proxy.rate_limit_state_path,
+        mask_usernames_in_logs=config.proxy.mask_usernames_in_logs,
     )
     # Shared SessionManager so login and middleware share session tracking
     shared_session_mgr = SessionManager(

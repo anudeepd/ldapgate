@@ -99,6 +99,10 @@ proxy:
   logout_path: /_auth/logout
   app_name: "My Application"
 
+  # Keep usernames masked in ldapgate's authentication and rate-limit logs.
+  # Set false only when operators need full usernames in service logs.
+  mask_usernames_in_logs: true
+
   # Keep true in production. If TLS terminates at a trusted reverse proxy,
   # configure trusted_proxies so LDAPGate can honour X-Forwarded-Proto.
   secure_cookies: true
