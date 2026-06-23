@@ -74,6 +74,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
             config.proxy.session_ttl,
             revocation_path=config.proxy.revocation_path,
             max_sessions_per_user=config.proxy.max_sessions_per_user,
+            bind_client=config.proxy.bind_client,
         )
         self.ldap_auth = ldap_auth or LDAPAuthenticator(config.ldap)
         self._basic_auth_limiter = rate_limiter or BasicAuthRateLimiter(
@@ -311,6 +312,7 @@ def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str]
         config.proxy.session_ttl,
         revocation_path=config.proxy.revocation_path,
         max_sessions_per_user=config.proxy.max_sessions_per_user,
+        bind_client=config.proxy.bind_client,
     )
     app.include_router(create_login_router(
         config, ldap_auth=shared_ldap_auth, template_path=template_path,

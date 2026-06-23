@@ -3,9 +3,9 @@
 import asyncio
 import base64
 import hashlib
+import inspect
 import logging
 import os
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -364,9 +364,8 @@ def _set_session_cookie(
 ) -> None:
     """Set the LDAPGate session cookie across supported Python versions.
 
-    Starlette exposes the ``partitioned`` option before every supported
-    Python version can use it. Passing ``partitioned=True`` on Python < 3.14
-    raises at runtime, so only opt in where the stdlib supports it.
+    Use the partitioned attribute only when the installed Starlette version
+    supports it. Python and Starlette may be upgraded independently.
     """
     kwargs = {
         "key": key,
@@ -379,7 +378,7 @@ def _set_session_cookie(
     }
     if expires is not None:
         kwargs["expires"] = expires
-    if secure and sys.version_info >= (3, 14):
+    if secure and "partitioned" in inspect.signature(response.set_cookie).parameters:
         kwargs["partitioned"] = True
     response.set_cookie(**kwargs)
 
@@ -456,6 +455,7 @@ class ProxyApp:
             config.proxy.session_ttl,
             revocation_path=config.proxy.revocation_path,
             max_sessions_per_user=config.proxy.max_sessions_per_user,
+            bind_client=config.proxy.bind_client,
         )
         self._basic_auth_limiter = BasicAuthRateLimiter(
             max_failures=config.proxy.rate_limit_max_failures,
@@ -998,6 +998,7 @@ def create_login_router(
         config.proxy.session_ttl,
         revocation_path=config.proxy.revocation_path,
         max_sessions_per_user=config.proxy.max_sessions_per_user,
+        bind_client=config.proxy.bind_client,
     )
 
     # Resolve template: custom path → bundled ldapgate template → inline fallback

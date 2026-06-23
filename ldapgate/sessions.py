@@ -128,7 +128,7 @@ class SessionManager:
     COOKIE_NAME = "ldapgate_session"
 
     def __init__(self, secret_key: str, session_ttl: int = 3600, revocation_path: Optional[str] = None,
-                 max_sessions_per_user: int = 0):
+                 max_sessions_per_user: int = 0, bind_client: bool = True):
         """Initialize session manager.
 
         Args:
@@ -138,6 +138,8 @@ class SessionManager:
                 cross-process logout support.
             max_sessions_per_user: Max concurrent sessions per user (0 = unlimited).
                 When exceeded the oldest session is revoked. Per-process tracking.
+            bind_client: Bind sessions and CSRF tokens to the client IP and
+                User-Agent. Disable for clients using privacy relays.
         """
         if _is_weak_secret(secret_key):
             raise ValueError(
@@ -153,6 +155,7 @@ class SessionManager:
             ttl=session_ttl,
         )
         self.max_sessions_per_user = max_sessions_per_user
+        self.bind_client = bind_client
         # username -> {cookie_hash: (cookie_value, last_seen_monotonic)}
         self._user_sessions: dict[str, dict[str, tuple[str, float]]] = {}
         self._sessions_lock = threading.Lock()
@@ -166,6 +169,8 @@ class SessionManager:
 
     def _client_hash(self, client_ip: str, user_agent: str) -> str:
         """Bind session to client IP and User-Agent to prevent cookie replay."""
+        if not self.bind_client:
+            return ""
         payload = f"{client_ip}:{user_agent}"
         return hashlib.sha256(payload.encode()).hexdigest()[:32]
 
@@ -307,7 +312,11 @@ class SessionManager:
     def generate_csrf_token(self, client_ip: str = "") -> str:
         """Generate a signed CSRF token bound to the client IP."""
         nonce = base64.b64encode(os.urandom(12)).decode()
-        fingerprint = hashlib.sha256(client_ip.encode()).hexdigest()[:16] if client_ip else ""
+        fingerprint = (
+            hashlib.sha256(client_ip.encode()).hexdigest()[:16]
+            if self.bind_client and client_ip
+            else ""
+        )
         return self._csrf_serializer.dumps({"n": nonce, "f": fingerprint})
 
     def _prune_csrf_used(self, now: float) -> None:

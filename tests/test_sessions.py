@@ -148,6 +148,16 @@ def test_csrf_token_ip_binding():
     assert not manager.validate_csrf_token(token, client_ip="10.0.0.2")
 
 
+def test_client_binding_can_be_disabled_for_unstable_addresses():
+    manager = SessionManager(_TEST_SECRET, session_ttl=3600, bind_client=False)
+
+    cookie = manager.create_session("testuser", client_ip="10.0.0.1", user_agent="Safari/1")
+    assert manager.verify_session(cookie, client_ip="10.0.0.2", user_agent="Safari/2") == "testuser"
+
+    token = manager.generate_csrf_token(client_ip="10.0.0.1")
+    assert manager.validate_csrf_token(token, client_ip="10.0.0.2")
+
+
 def test_csrf_token_without_ip():
     """Test CSRF tokens work without IP binding (backward compat)."""
     manager = SessionManager(_TEST_SECRET, session_ttl=3600)

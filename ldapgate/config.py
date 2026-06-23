@@ -158,6 +158,10 @@ class ProxySettings(BaseModel):
     )
     secret_key: SecretStr = Field(..., description="Secret key for signing session cookies")
     session_ttl: int = Field(3600, description="Session time-to-live in seconds")
+    bind_client: bool = Field(
+        True,
+        description="Bind browser sessions and login CSRF tokens to the client IP and User-Agent. Disable for clients using privacy relays or unstable addresses.",
+    )
     user_header: str = Field(
         "X-Forwarded-User", description="Header name for authenticated username"
     )
