@@ -149,6 +149,7 @@ def test_proxy_settings_defaults():
     assert settings.listen_port == 9000
     assert settings.backend_url is None
     assert settings.session_ttl == 3600
+    assert settings.idle_timeout == 0
     assert settings.user_header == "X-Forwarded-User"
     assert settings.login_path == "/_auth/login"
     assert settings.app_name == "ldapgate"

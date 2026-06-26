@@ -63,6 +63,49 @@ def test_session_expiry():
     assert manager.verify_session(cookie, client_ip="10.0.0.1", user_agent="Mozilla/5.0") is None
 
 
+def test_idle_timeout_disabled_by_default(monkeypatch):
+    """Idle tracking is opt-in; default sessions keep old absolute-TTL behavior."""
+    now = 1000.0
+    monkeypatch.setattr("ldapgate.sessions.time.monotonic", lambda: now)
+    manager = SessionManager(_TEST_SECRET, session_ttl=3600)
+
+    cookie = manager.create_session("testuser")
+
+    now = 2000.0
+    assert manager.verify_session(cookie) == "testuser"
+
+
+def test_idle_timeout_rejects_inactive_session(monkeypatch):
+    """Sessions expire after idle_timeout seconds without authenticated requests."""
+    now = 1000.0
+    monkeypatch.setattr("ldapgate.sessions.time.monotonic", lambda: now)
+    manager = SessionManager(_TEST_SECRET, session_ttl=3600, idle_timeout=60)
+
+    cookie = manager.create_session("testuser")
+    assert manager.verify_session(cookie) == "testuser"
+
+    now = 1061.0
+    assert manager.verify_session(cookie) is None
+
+
+def test_idle_timeout_refreshes_on_activity(monkeypatch):
+    """Successful verification touches activity and extends the idle window."""
+    now = 1000.0
+    monkeypatch.setattr("ldapgate.sessions.time.monotonic", lambda: now)
+    manager = SessionManager(_TEST_SECRET, session_ttl=3600, idle_timeout=60)
+
+    cookie = manager.create_session("testuser")
+
+    now = 1050.0
+    assert manager.verify_session(cookie) == "testuser"
+
+    now = 1101.0
+    assert manager.verify_session(cookie) == "testuser"
+
+    now = 1162.0
+    assert manager.verify_session(cookie) is None
+
+
 def test_different_keys_dont_verify():
     """Test that sessions signed with different keys don't verify."""
     manager1 = SessionManager("x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!", session_ttl=3600)

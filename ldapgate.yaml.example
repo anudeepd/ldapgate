@@ -94,6 +94,8 @@ proxy:
   secret_key: 5vS5aN3xW2cY7mQ8rL9tP4zK6bH1dF0gJ2nR7uA9sC3eM8pQ
 
   session_ttl: 3600
+  # Optional inactivity timeout for browser sessions. 0 disables idle expiry.
+  idle_timeout: 0
   # Keep true unless clients use privacy relays or changing network addresses.
   # Set false to support Safari Private Relay and similar networks.
   bind_client: true

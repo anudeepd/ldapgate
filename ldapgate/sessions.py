@@ -128,7 +128,7 @@ class SessionManager:
     COOKIE_NAME = "ldapgate_session"
 
     def __init__(self, secret_key: str, session_ttl: int = 3600, revocation_path: Optional[str] = None,
-                 max_sessions_per_user: int = 0, bind_client: bool = True):
+                 max_sessions_per_user: int = 0, bind_client: bool = True, idle_timeout: int = 0):
         """Initialize session manager.
 
         Args:
@@ -140,6 +140,8 @@ class SessionManager:
                 When exceeded the oldest session is revoked. Per-process tracking.
             bind_client: Bind sessions and CSRF tokens to the client IP and
                 User-Agent. Disable for clients using privacy relays.
+            idle_timeout: Seconds without authenticated requests before a
+                session expires (0 = disabled). Per-process tracking.
         """
         if _is_weak_secret(secret_key):
             raise ValueError(
@@ -156,8 +158,11 @@ class SessionManager:
         )
         self.max_sessions_per_user = max_sessions_per_user
         self.bind_client = bind_client
+        self.idle_timeout = idle_timeout
         # username -> {cookie_hash: (cookie_value, last_seen_monotonic)}
         self._user_sessions: dict[str, dict[str, tuple[str, float]]] = {}
+        # cookie_hash -> (cookie_value, username, last_seen_monotonic)
+        self._session_activity: dict[str, tuple[str, str, float]] = {}
         self._sessions_lock = threading.Lock()
         # Tracks consumed CSRF token fingerprints to prevent replay within TTL.
         # fingerprint -> expiry (monotonic)
@@ -189,6 +194,10 @@ class SessionManager:
                         del sessions[cid]
                 if not sessions:
                     del self._user_sessions[username]
+            for cid in list(self._session_activity):
+                _cookie_val, _username, last_seen = self._session_activity[cid]
+                if now - last_seen > self.session_ttl:
+                    del self._session_activity[cid]
 
     def _track_session(self, cookie_value: str, username: str, now: float) -> None:
         """Register a session in the tracking dict and enforce the per-user limit.
@@ -196,10 +205,11 @@ class SessionManager:
         When the limit is exceeded the oldest session is revoked via the
         revocation store so it can no longer be verified.
         """
-        if self.max_sessions_per_user <= 0:
-            return
         cid = self._cookie_id(cookie_value)
         with self._sessions_lock:
+            self._session_activity[cid] = (cookie_value, username, now)
+            if self.max_sessions_per_user <= 0:
+                return
             sessions = self._user_sessions.setdefault(username, {})
             # If this cookie is already tracked, just update timestamp
             if cid in sessions:
@@ -215,12 +225,13 @@ class SessionManager:
 
     def _untrack_session(self, cookie_value: str, username: str) -> None:
         """Remove a session from tracking (on logout/revocation)."""
-        if self.max_sessions_per_user <= 0:
-            return
         if not username:
             return
         cid = self._cookie_id(cookie_value)
         with self._sessions_lock:
+            self._session_activity.pop(cid, None)
+            if self.max_sessions_per_user <= 0:
+                return
             sessions = self._user_sessions.get(username)
             if sessions:
                 sessions.pop(cid, None)
@@ -283,6 +294,15 @@ class SessionManager:
                 current_hash = self._client_hash(client_ip, user_agent)
                 if current_hash != expected_hash:
                     return None
+            if self.idle_timeout > 0:
+                cid = self._cookie_id(cookie_value)
+                with self._sessions_lock:
+                    activity = self._session_activity.get(cid)
+                if activity is not None:
+                    _cookie_val, _tracked_username, last_seen = activity
+                    if now - last_seen > self.idle_timeout:
+                        self.revoke_session(cookie_value, username=username)
+                        return None
             self._track_session(cookie_value, username, now)
             return username
         except BadSignature:

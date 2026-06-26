@@ -20,7 +20,7 @@ from ldapgate.proxy import (
     create_login_router,
     create_proxy_app,
 )
-from ldapgate.middleware import add_ldap_auth
+from ldapgate.middleware import LDAPAuthMiddleware, add_ldap_auth
 from ldapgate.sessions import SessionManager
 
 
@@ -395,6 +395,44 @@ def test_health_endpoint_requires_auth():
     with TestClient(app) as tc:
         resp = tc.get("/_auth/health")
         assert resp.status_code == 401
+
+
+def test_middleware_redirects_after_idle_timeout(monkeypatch):
+    config = _test_config()
+    config.proxy.bind_client = False
+    config.proxy.idle_timeout = 10
+    manager = SessionManager(
+        config.proxy.secret_key.get_secret_value(),
+        session_ttl=config.proxy.session_ttl,
+        bind_client=False,
+        idle_timeout=config.proxy.idle_timeout,
+    )
+
+    now = 1000.0
+    monkeypatch.setattr("ldapgate.sessions.time.monotonic", lambda: now)
+    cookie = manager.create_session("alice")
+
+    app = FastAPI()
+
+    @app.get("/")
+    async def index():
+        return {"ok": True}
+
+    app.add_middleware(
+        LDAPAuthMiddleware,
+        config=config,
+        session_manager=manager,
+        ldap_auth=MagicMock(),
+    )
+
+    with TestClient(app, follow_redirects=False) as tc:
+        tc.cookies.set("ldapgate_session", cookie)
+        assert tc.get("/", headers={"Accept": "text/html"}).status_code == 200
+
+        now = 1011.0
+        resp = tc.get("/", headers={"Accept": "text/html"})
+        assert resp.status_code == 302
+        assert resp.headers["location"].startswith("/_auth/login?redirect=")
 
 
 def test_login_router_post_works():

@@ -51,6 +51,7 @@ proxy:
   backend_url: http://localhost:8080
   secret_key: change-me-to-something-random
   session_ttl: 3600
+  idle_timeout: 0                                  # set >0 to expire inactive browser sessions
   user_header: X-Forwarded-User
   login_path: /_auth/login
   logout_path: /_auth/logout

@@ -158,6 +158,10 @@ class ProxySettings(BaseModel):
     )
     secret_key: SecretStr = Field(..., description="Secret key for signing session cookies")
     session_ttl: int = Field(3600, description="Session time-to-live in seconds")
+    idle_timeout: int = Field(
+        0, ge=0,
+        description="Expire browser sessions after this many seconds without authenticated requests (0 = disabled)",
+    )
     bind_client: bool = Field(
         True,
         description="Bind browser sessions and login CSRF tokens to the client IP and User-Agent. Disable for clients using privacy relays or unstable addresses.",
