@@ -1,19 +1,19 @@
 """ldapgate - LDAP/AD authentication proxy and FastAPI middleware"""
 
-__version__ = "0.1.13"
+__version__ = '0.1.14'
 
 __all__ = [
-    "LDAPAuthenticator",
-    "LDAPConfig",
-    "LDAPAuthMiddleware",
-    "SessionManager",
-    "create_proxy_app",
-    "create_login_router",
-    "add_ldap_auth",
+    'LDAPAuthMiddleware',
+    'LDAPAuthenticator',
+    'LDAPConfig',
+    'SessionManager',
+    'add_ldap_auth',
+    'create_login_router',
+    'create_proxy_app',
 ]
 
 from ldapgate.config import LDAPConfig
 from ldapgate.ldap import LDAPAuthenticator
 from ldapgate.middleware import LDAPAuthMiddleware, add_ldap_auth
-from ldapgate.proxy import create_proxy_app, create_login_router
+from ldapgate.proxy import create_login_router, create_proxy_app
 from ldapgate.sessions import SessionManager

@@ -2,23 +2,21 @@
 
 import base64
 import binascii
+import fcntl
 import hashlib
-import json
 import ipaddress
+import json
 import logging
 import os
 import stat
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Optional
-
-import fcntl
 
 log = logging.getLogger(__name__)
 
 
-def _is_ip_in_networks(ip_str: str, networks: List[str]) -> bool:
+def _is_ip_in_networks(ip_str: str, networks: list[str]) -> bool:
     """Check if an IP string matches any of the CIDR or exact IP entries."""
     try:
         ip = ipaddress.ip_address(ip_str)
@@ -26,18 +24,17 @@ def _is_ip_in_networks(ip_str: str, networks: List[str]) -> bool:
         return False
     for entry in networks:
         try:
-            if "/" in entry:
+            if '/' in entry:
                 if ip in ipaddress.ip_network(entry, strict=False):
                     return True
-            else:
-                if ip == ipaddress.ip_address(entry):
-                    return True
+            elif ip == ipaddress.ip_address(entry):
+                return True
         except ValueError:
             continue
     return False
 
 
-def get_client_ip(request, trusted_proxies: Optional[List[str]] = None) -> str:
+def get_client_ip(request, trusted_proxies: list[str] | None = None) -> str:
     """Get the real client IP, respecting trusted proxies for X-Forwarded-For.
 
     When trusted_proxies are configured, walks the X-Forwarded-For chain
@@ -45,18 +42,18 @@ def get_client_ip(request, trusted_proxies: Optional[List[str]] = None) -> str:
     a trusted proxy. The first untrusted IP is the real client. Falls back
     to the direct connection IP.
     """
-    direct_ip = request.client.host if request.client else "unknown"
+    direct_ip = request.client.host if request.client else 'unknown'
     if not trusted_proxies:
         return direct_ip
     if not _is_ip_in_networks(direct_ip, trusted_proxies):
         return direct_ip
 
-    xff = request.headers.get("x-forwarded-for")
+    xff = request.headers.get('x-forwarded-for')
     if not xff:
         return direct_ip
 
     # Walk right-to-left; the first non-trusted IP is the real client
-    entries = [e.strip() for e in xff.split(",")]
+    entries = [e.strip() for e in xff.split(',')]
     for entry in reversed(entries):
         if not entry:
             continue
@@ -78,12 +75,10 @@ def _is_safe_host(host: str) -> bool:
         return False
     if len(host) > 255:
         return False
-    if "://" in host:
+    if '://' in host:
         return False
-    dangerous = ("\t", "\n", "\r", "\x0b", "\x0c", "\x00", "/", "\\", "@")
-    if any(c in host for c in dangerous):
-        return False
-    return True
+    dangerous = ('\t', '\n', '\r', '\x0b', '\x0c', '\x00', '/', '\\', '@')
+    return not any(c in host for c in dangerous)
 
 
 def _is_trusted_host(host: str, trusted_hosts: list[str]) -> bool:
@@ -94,13 +89,13 @@ def _is_trusted_host(host: str, trusted_hosts: list[str]) -> bool:
     return any(th.lower() == host_lower for th in trusted_hosts)
 
 
-def parse_basic_auth(authorization: str) -> Optional[tuple[str, str]]:
+def parse_basic_auth(authorization: str) -> tuple[str, str] | None:
     """Parse an Authorization: Basic header. Returns (username, password) or None."""
-    if not authorization.startswith("Basic "):
+    if not authorization.startswith('Basic '):
         return None
     try:
-        decoded = base64.b64decode(authorization[6:]).decode("utf-8", errors="strict")
-        username, _, password = decoded.partition(":")
+        decoded = base64.b64decode(authorization[6:]).decode('utf-8', errors='strict')
+        username, _, password = decoded.partition(':')
         username = username.strip()
         if not username or not password:
             return None
@@ -127,7 +122,7 @@ class BasicAuthRateLimiter:
         max_failures: int = 5,
         window_seconds: int = 300,
         lockout_seconds: int = 60,
-        state_path: Optional[str] = None,
+        state_path: str | None = None,
         mask_usernames_in_logs: bool = True,
     ) -> None:
         self.MAX_FAILURES = max_failures
@@ -147,11 +142,11 @@ class BasicAuthRateLimiter:
 
     def _username_for_log(self, username: str) -> str:
         if not self._mask_usernames_in_logs:
-            return username.replace("\r", "").replace("\n", "")
+            return username.replace('\r', '').replace('\n', '')
         h = hashlib.sha256(username.encode()).hexdigest()[:8]
         safe = username.strip()
-        prefix = safe[0] if safe else "?"
-        return f"{prefix}***{h}"
+        prefix = safe[0] if safe else '?'
+        return f'{prefix}***{h}'
 
     def _prune_all(self, now: float) -> None:
         """Remove expired entries from all tracking dicts."""
@@ -189,7 +184,7 @@ class BasicAuthRateLimiter:
             if not chunk:
                 break
             raw_parts.append(chunk)
-        raw = b"".join(raw_parts)
+        raw = b''.join(raw_parts)
         if not raw:
             return
         try:
@@ -204,51 +199,39 @@ class BasicAuthRateLimiter:
                 return []
             return [float(v) for v in value if isinstance(v, (int, float))]
 
-        failures = data.get("failures", {})
+        failures = data.get('failures', {})
         if not isinstance(failures, dict):
             failures = {}
         self._failures = defaultdict(
             list,
-            {
-                str(k): [t for t in _float_list(v) if now - t < self.WINDOW_SECONDS]
-                for k, v in failures.items()
-            },
+            {str(k): [t for t in _float_list(v) if now - t < self.WINDOW_SECONDS] for k, v in failures.items()},
         )
-        lockouts = data.get("lockouts", {})
+        lockouts = data.get('lockouts', {})
         if not isinstance(lockouts, dict):
             lockouts = {}
         self._lockouts = {
-            str(k): float(v)
-            for k, v in lockouts.items()
-            if isinstance(v, (int, float))
-            and now < float(v)
+            str(k): float(v) for k, v in lockouts.items() if isinstance(v, (int, float)) and now < float(v)
         }
-        user_failures = data.get("user_failures", {})
+        user_failures = data.get('user_failures', {})
         if not isinstance(user_failures, dict):
             user_failures = {}
         self._user_failures = defaultdict(
             list,
-            {
-                str(k): [t for t in _float_list(v) if now - t < self.WINDOW_SECONDS]
-                for k, v in user_failures.items()
-            },
+            {str(k): [t for t in _float_list(v) if now - t < self.WINDOW_SECONDS] for k, v in user_failures.items()},
         )
-        user_lockouts = data.get("user_lockouts", {})
+        user_lockouts = data.get('user_lockouts', {})
         if not isinstance(user_lockouts, dict):
             user_lockouts = {}
         self._user_lockouts = {
-            str(k): float(v)
-            for k, v in user_lockouts.items()
-            if isinstance(v, (int, float))
-            and now < float(v)
+            str(k): float(v) for k, v in user_lockouts.items() if isinstance(v, (int, float)) and now < float(v)
         }
 
     def _save_shared_state_unlocked(self, fd: int) -> None:
         data = {
-            "failures": dict(self._failures),
-            "lockouts": self._lockouts,
-            "user_failures": dict(self._user_failures),
-            "user_lockouts": self._user_lockouts,
+            'failures': dict(self._failures),
+            'lockouts': self._lockouts,
+            'user_failures': dict(self._user_failures),
+            'user_lockouts': self._user_lockouts,
         }
         serialized = json.dumps(data).encode()
         os.ftruncate(fd, 0)
@@ -270,9 +253,10 @@ class BasicAuthRateLimiter:
             st = os.fstat(fd)
             if stat.S_IMODE(st.st_mode) & 0o177:
                 log.error(
-                    "Rate-limit state file %s has insecure permissions (%s). "
-                    "Expected 0o600. Falling back to in-memory rate limiting.",
-                    self._state_path, oct(stat.S_IMODE(st.st_mode)),
+                    'Rate-limit state file %s has insecure permissions (%s). '
+                    'Expected 0o600. Falling back to in-memory rate limiting.',
+                    self._state_path,
+                    oct(stat.S_IMODE(st.st_mode)),
                 )
                 return mutate(time.monotonic())
             fcntl.flock(fd, fcntl.LOCK_EX)
@@ -312,14 +296,13 @@ class BasicAuthRateLimiter:
         total = len(self._failures) + len(self._user_failures)
         if total <= self._MAX_TRACKED:
             return
-        for d, lockouts in ((self._failures, self._lockouts),
-                            (self._user_failures, self._user_lockouts)):
+        for d, lockouts in ((self._failures, self._lockouts), (self._user_failures, self._user_lockouts)):
             while len(d) + len(self._failures) + len(self._user_failures) > self._MAX_TRACKED and d:
                 oldest_key = min(d, key=lambda k: min(d[k]) if d[k] else now)
                 del d[oldest_key]
                 lockouts.pop(oldest_key, None)
 
-    def is_locked_out(self, ip: str, username: Optional[str] = None) -> bool:
+    def is_locked_out(self, ip: str, username: str | None = None) -> bool:
         def _check(now: float) -> bool:
             self._prune_all(now)
 
@@ -344,7 +327,7 @@ class BasicAuthRateLimiter:
 
         return self._with_shared_state(_check)
 
-    def record_failure(self, ip: str, username: Optional[str] = None) -> None:
+    def record_failure(self, ip: str, username: str | None = None) -> None:
         def _record(now: float) -> None:
             self._enforce_capacity(now)
             self._prune_all(now)
@@ -354,11 +337,14 @@ class BasicAuthRateLimiter:
             self._failures[ip] = window
             if len(window) >= self.MAX_FAILURES:
                 self._lockouts[ip] = now + self.LOCKOUT_SECONDS
-                log.warning("Basic auth: IP %s locked out after %d failures "
-                            "(NOTE: limit is per-process unless shared state is configured)",
-                            ip, len(window))
+                log.warning(
+                    'Basic auth: IP %s locked out after %d failures '
+                    '(NOTE: limit is per-process unless shared state is configured)',
+                    ip,
+                    len(window),
+                )
             else:
-                log.warning("Basic auth: failed attempt from IP %s (%d/%d)", ip, len(window), self.MAX_FAILURES)
+                log.warning('Basic auth: failed attempt from IP %s (%d/%d)', ip, len(window), self.MAX_FAILURES)
 
             if username:
                 username_lower = username.lower()
@@ -367,12 +353,15 @@ class BasicAuthRateLimiter:
                 self._user_failures[username_lower] = user_window
                 if len(user_window) >= self.MAX_FAILURES:
                     self._user_lockouts[username_lower] = now + self.LOCKOUT_SECONDS
-                    log.warning("Basic auth: user %s locked out after %d failures",
-                               self._username_for_log(username_lower), len(user_window))
+                    log.warning(
+                        'Basic auth: user %s locked out after %d failures',
+                        self._username_for_log(username_lower),
+                        len(user_window),
+                    )
 
         self._with_shared_state(_record)
 
-    def record_success(self, ip: str, username: Optional[str] = None) -> None:
+    def record_success(self, ip: str, username: str | None = None) -> None:
         def _clear(_now: float) -> None:
             self._failures.pop(ip, None)
             self._lockouts.pop(ip, None)

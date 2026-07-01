@@ -1,8 +1,8 @@
 """Starlette middleware for FastAPI LDAP authentication."""
 
+import contextlib
 import hashlib
 import logging
-from typing import Optional
 from urllib.parse import quote
 
 from fastapi import FastAPI
@@ -11,7 +11,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
-from ldapgate._auth_utils import BasicAuthRateLimiter, BasicAuthSuccessCache, _is_ip_in_networks, _is_safe_host, _is_trusted_host, get_client_ip, parse_basic_auth
+from ldapgate._auth_utils import (
+    BasicAuthRateLimiter,
+    BasicAuthSuccessCache,
+    _is_ip_in_networks,
+    _is_safe_host,
+    _is_trusted_host,
+    get_client_ip,
+    parse_basic_auth,
+)
 from ldapgate.config import LDAPConfig
 from ldapgate.ldap import LDAPAuthenticator
 from ldapgate.sessions import SessionManager
@@ -22,26 +30,27 @@ log = logging.getLogger(__name__)
 def _username_log(username: str, mask: bool = True) -> str:
     """Mask username for privacy in logs: first char + SHA-256 suffix."""
     if not mask:
-        return username.replace("\r", "").replace("\n", "")
+        return username.replace('\r', '').replace('\n', '')
     h = hashlib.sha256(username.encode()).hexdigest()[:8]
     safe = username.strip()
-    prefix = safe[0] if safe else "?"
-    return f"{prefix}***{h}"
+    prefix = safe[0] if safe else '?'
+    return f'{prefix}***{h}'
+
 
 _401 = Response(
     status_code=401,
-    headers={"WWW-Authenticate": 'Basic realm="LDAPGate"'},
+    headers={'WWW-Authenticate': 'Basic realm="LDAPGate"'},
 )
 
 # Security headers added to all responses (must match proxy.py)
 _SECURITY_HEADERS = {
-    "X-Frame-Options": "DENY",
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-    "Pragma": "no-cache",
+    'X-Frame-Options': 'DENY',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    'Pragma': 'no-cache',
 }
-_COOP_HEADER = ("Cross-Origin-Opener-Policy", "same-origin")
+_COOP_HEADER = ('Cross-Origin-Opener-Policy', 'same-origin')
 
 
 class LDAPAuthMiddleware(BaseHTTPMiddleware):
@@ -52,9 +61,14 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         app.add_middleware(LDAPAuthMiddleware, config=config)
     """
 
-    def __init__(self, app: FastAPI, config: LDAPConfig, rate_limiter: Optional[BasicAuthRateLimiter] = None,
-                 session_manager: Optional[SessionManager] = None,
-                 ldap_auth: Optional[LDAPAuthenticator] = None):
+    def __init__(
+        self,
+        app: FastAPI,
+        config: LDAPConfig,
+        rate_limiter: BasicAuthRateLimiter | None = None,
+        session_manager: SessionManager | None = None,
+        ldap_auth: LDAPAuthenticator | None = None,
+    ):
         """Initialize middleware.
 
         Args:
@@ -103,32 +117,36 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         Returns:
             Response
         """
-        add_headers = lambda response: self._add_security_headers(response, request=request)
+
+        def add_headers(response):
+            return self._add_security_headers(response, request=request)
 
         # Enforce HTTPS when secure_cookies is enabled
         if self.config.proxy.secure_cookies:
             scheme = self._get_scheme(request)
-            if scheme != "https":
-                return add_headers(Response(
-                    content="HTTPS required",
-                    status_code=421,
-                    media_type="text/plain",
-                ))
+            if scheme != 'https':
+                return add_headers(
+                    Response(
+                        content='HTTPS required',
+                        status_code=421,
+                        media_type='text/plain',
+                    )
+                )
 
         # Skip auth for login endpoints and static assets
         if self._should_skip_auth(request.url.path):
             response = await call_next(request)
             return add_headers(response)
 
-        username: Optional[str] = None
+        username: str | None = None
 
         # Check HTTP Basic auth first (WebDAV clients, curl, etc.)
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.startswith("Basic "):
+        auth_header = request.headers.get('authorization', '')
+        if auth_header.startswith('Basic '):
             client_ip = get_client_ip(request, self.config.proxy.trusted_proxies)
             creds = parse_basic_auth(auth_header)
             if self._basic_auth_limiter.is_locked_out(client_ip, username=creds[0] if creds else None):
-                log.warning("Basic auth: rejecting locked-out IP %s", client_ip)
+                log.warning('Basic auth: rejecting locked-out IP %s', client_ip)
                 return add_headers(_401)
             if creds and self._basic_auth_cache.is_valid(creds[0], creds[1]):
                 self._basic_auth_limiter.record_success(client_ip, creds[0])
@@ -147,74 +165,86 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         if username is None:
             session_cookie = request.cookies.get(self._cookie_name)
             client_ip = get_client_ip(request, self.config.proxy.trusted_proxies)
-            user_agent = request.headers.get("user-agent", "")
+            user_agent = request.headers.get('user-agent', '')
             username = self.session_manager.verify_session(session_cookie, client_ip=client_ip, user_agent=user_agent)
 
         if not username:
             # Non-browser clients won't follow a redirect — give them a 401 challenge
-            accept = request.headers.get("accept", "")
-            if "text/html" not in accept:
+            accept = request.headers.get('accept', '')
+            if 'text/html' not in accept:
                 return add_headers(_401)
             # Redirect browsers to login with original URL as redirect target
             redirect_url = request.url.path
             if request.url.query:
-                redirect_url += f"?{request.url.query}"
-            return add_headers(RedirectResponse(
-                url=f"{self.config.proxy.login_path}?redirect={quote(redirect_url, safe='')}",
-                status_code=302,
-            ))
+                redirect_url += f'?{request.url.query}'
+            return add_headers(
+                RedirectResponse(
+                    url=f'{self.config.proxy.login_path}?redirect={quote(redirect_url, safe="")}',
+                    status_code=302,
+                )
+            )
 
         # Validate request body size
-        content_length = request.headers.get("content-length")
+        content_length = request.headers.get('content-length')
         if content_length is not None:
             try:
                 cl = int(content_length)
                 if cl < 0 or cl > self.config.proxy.max_body_size:
-                    return add_headers(Response(
-                        content="Request body too large",
-                        status_code=413,
-                        media_type="text/plain",
-                    ))
+                    return add_headers(
+                        Response(
+                            content='Request body too large',
+                            status_code=413,
+                            media_type='text/plain',
+                        )
+                    )
             except ValueError:
-                return add_headers(Response(
-                    content="Invalid Content-Length",
-                    status_code=400,
-                    media_type="text/plain",
-                ))
+                return add_headers(
+                    Response(
+                        content='Invalid Content-Length',
+                        status_code=400,
+                        media_type='text/plain',
+                    )
+                )
 
         # Store username in request state for downstream use
         request.state.user = username
-        log.info("Authenticated user '%s' from IP %s", _username_log(username, self.config.proxy.mask_usernames_in_logs), get_client_ip(request, self.config.proxy.trusted_proxies))
+        log.info(
+            "Authenticated user '%s' from IP %s",
+            _username_log(username, self.config.proxy.mask_usernames_in_logs),
+            get_client_ip(request, self.config.proxy.trusted_proxies),
+        )
 
         # Inject user header into request scope (MutableHeaders modifies scope in place)
         mutable_headers = MutableHeaders(scope=request.scope)
         # Strip CR/LF to prevent HTTP header injection
-        safe_username = username.translate(str.maketrans({"\r": "", "\n": ""}))
+        safe_username = username.translate(str.maketrans({'\r': '', '\n': ''}))
         mutable_headers[self.config.proxy.user_header] = safe_username
 
         # Strip Authorization header so backend never sees raw credentials
-        if "authorization" in mutable_headers:
-            del mutable_headers["authorization"]
+        if 'authorization' in mutable_headers:
+            del mutable_headers['authorization']
 
         # Strip all X-Forwarded-* headers forwarded by the client so the
         # backend only sees the authoritative values the middleware sets.
         for key in list(request.headers.keys()):
-            if key.lower().startswith("x-forwarded-"):
-                try:
+            if key.lower().startswith('x-forwarded-'):
+                with contextlib.suppress(KeyError):
                     del mutable_headers[key]
-                except KeyError:
-                    pass
 
         # Add X-Forwarded-For and X-Forwarded-Proto for the backend
-        direct_ip = request.client.host if request.client else ""
+        direct_ip = request.client.host if request.client else ''
         if direct_ip:
-            mutable_headers["X-Forwarded-For"] = direct_ip
+            mutable_headers['X-Forwarded-For'] = direct_ip
         scheme = self._get_scheme(request)
-        mutable_headers["X-Forwarded-Proto"] = scheme
-        if original_host := request.headers.get("host"):
-            if _is_safe_host(original_host):
-                if not self.config.proxy.trusted_hosts or _is_trusted_host(original_host, self.config.proxy.trusted_hosts):
-                    mutable_headers["X-Forwarded-Host"] = original_host
+        mutable_headers['X-Forwarded-Proto'] = scheme
+        if (
+            (original_host := request.headers.get('host'))
+            and _is_safe_host(original_host)
+            and (
+                not self.config.proxy.trusted_hosts or _is_trusted_host(original_host, self.config.proxy.trusted_hosts)
+            )
+        ):
+            mutable_headers['X-Forwarded-Host'] = original_host
 
         # Call next middleware/route
         response = await call_next(request)
@@ -226,34 +256,32 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         If the direct client is a trusted proxy, honours X-Forwarded-Proto.
         Otherwise uses the ASGI scheme directly.
         """
-        direct_ip = request.client.host if request.client else ""
+        direct_ip = request.client.host if request.client else ''
         if self.config.proxy.trusted_proxies and _is_ip_in_networks(direct_ip, self.config.proxy.trusted_proxies):
-            return request.headers.get("x-forwarded-proto", request.url.scheme)
+            return request.headers.get('x-forwarded-proto', request.url.scheme)
         return request.url.scheme
 
-    def _add_security_headers(self, response: Response, request: Optional[Request] = None) -> Response:
+    def _add_security_headers(self, response: Response, request: Request | None = None) -> Response:
         """Add security headers to a response."""
         for key, value in _SECURITY_HEADERS.items():
             if key.lower() not in response.headers:
                 response.headers[key] = value
-        if request is not None and self._get_scheme(request) == "https":
+        if request is not None and self._get_scheme(request) == 'https':
             key, value = _COOP_HEADER
             if key.lower() not in response.headers:
                 response.headers[key] = value
         # Preserve any existing CSP (e.g. nonce from login form) rather than overwriting
-        if "content-security-policy" not in {k.lower() for k in response.headers}:
+        if 'content-security-policy' not in {k.lower() for k in response.headers}:
             csp = (
                 "default-src 'self'; form-action 'self'; script-src 'self'; "
                 "style-src 'self'; img-src 'self' data:; font-src 'self' data:"
             )
-            response.headers["Content-Security-Policy"] = csp
-        if "permissions-policy" not in {k.lower() for k in response.headers}:
-            response.headers["Permissions-Policy"] = (
-                "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-            )
+            response.headers['Content-Security-Policy'] = csp
+        if 'permissions-policy' not in {k.lower() for k in response.headers}:
+            response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=(), interest-cohort=()'
         if self.config.proxy.secure_cookies and self.config.proxy.hsts_max_age > 0:
-            response.headers["Strict-Transport-Security"] = (
-                f"max-age={self.config.proxy.hsts_max_age}; includeSubDomains"
+            response.headers['Strict-Transport-Security'] = (
+                f'max-age={self.config.proxy.hsts_max_age}; includeSubDomains'
             )
         return response
 
@@ -261,7 +289,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
     def _cookie_name(self) -> str:
         name = self.config.proxy.session_cookie_name
         if self.config.proxy.secure_cookies:
-            return f"__Host-{name}"
+            return f'__Host-{name}'
         return name
 
     def _should_skip_auth(self, path: str) -> bool:
@@ -281,7 +309,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         return any(path == prefix or path.startswith(prefix) for prefix in static_prefixes)
 
 
-def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str] = None) -> SessionManager:
+def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: str | None = None) -> SessionManager:
     """Add LDAP auth to a FastAPI app: login routes + session middleware.
 
     Registers the login form (GET/POST) on the app and attaches
@@ -296,7 +324,10 @@ def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str]
     Returns:
         Shared SessionManager used by both the login router and middleware.
     """
+    from pathlib import Path
+
     from ldapgate.proxy import create_login_router
+
     # Shared LDAP authenticator to avoid double connection pool
     shared_ldap_auth = LDAPAuthenticator(config.ldap)
     # Shared rate limiter so form login and Basic auth share limits
@@ -316,12 +347,20 @@ def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: Optional[str]
         bind_client=config.proxy.bind_client,
         idle_timeout=config.proxy.idle_timeout,
     )
-    app.include_router(create_login_router(
-        config, ldap_auth=shared_ldap_auth, template_path=template_path,
-        rate_limiter=shared_limiter, session_manager=shared_session_mgr,
-    ))
+    app.include_router(
+        create_login_router(
+            config,
+            ldap_auth=shared_ldap_auth,
+            template_path=Path(template_path) if template_path else None,
+            rate_limiter=shared_limiter,
+            session_manager=shared_session_mgr,
+        )
+    )
     app.add_middleware(
-        LDAPAuthMiddleware, config=config, rate_limiter=shared_limiter,
-        session_manager=shared_session_mgr, ldap_auth=shared_ldap_auth,
+        LDAPAuthMiddleware,
+        config=config,
+        rate_limiter=shared_limiter,
+        session_manager=shared_session_mgr,
+        ldap_auth=shared_ldap_auth,
     )
     return shared_session_mgr

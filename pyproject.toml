@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ldapgate"
-version = "0.1.13"
+version = "0.1.14"
 description = "Lightweight LDAP/AD authentication proxy and FastAPI middleware"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,6 +31,7 @@ dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "httpx[http2]>=0.27",
+    "ruff>=0.15.0",
 ]
 
 [project.scripts]
@@ -38,3 +39,38 @@ ldapgate = "ldapgate.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ldapgate"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG", "C4", "EM", "FA", "ISC", "PIE", "PL", "PT", "RET", "RUF", "SLF", "SLOT", "T10", "T20", "TCH", "YTT"]
+ignore = [
+    "E501",    # line too long – Jinja HTML templates can't be wrapped cleanly
+    "EM101",   # exception string literals – too noisy for guard clauses
+    "EM102",   # exception f-string literals – same
+    "E402",    # module-level import order – intentional circular dep avoidance
+    "PLC0415", # import at top-level – intentional lazy imports in tests
+    "PLR0911", # too many return statements – architectural
+    "PLR0912", # too many branches – architectural
+    "PLR0913", # too many arguments – architectural
+    "PLR0915", # too many statements – architectural
+    "PLR2004", # magic value comparisons – numeric constants are fine
+    "N818",    # exception name suffix – minor naming concern
+    "SLF001",  # access to private member – sometimes necessary
+    "RUF001",  # ambiguous character in string – Jinja template content
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "TCH"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore:'asyncio\\.iscoroutinefunction' is deprecated and slated for removal in Python 3\\.16:DeprecationWarning:fastapi\\.routing",
+    "ignore:'asyncio\\.iscoroutinefunction' is deprecated and slated for removal in Python 3\\.16:DeprecationWarning:asyncio\\.threads",
+]

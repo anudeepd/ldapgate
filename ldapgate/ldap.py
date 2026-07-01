@@ -6,21 +6,22 @@ import ssl
 import threading
 import time
 import warnings
-from typing import Optional
 from urllib.parse import urlparse
 
 # Suppress deprecation warnings from pyasn1's legacy tagMap/typeMap aliases
 # that ldap3 still imports. These are harmless third-party compatibility warnings.
 warnings.filterwarnings(
-    "ignore",
-    message=r"tagMap is deprecated\. Please use TAG_MAP instead\.",
+    'ignore',
+    message=r'tagMap is deprecated\. Please use TAG_MAP instead\.',
     category=DeprecationWarning,
 )
 warnings.filterwarnings(
-    "ignore",
-    message=r"typeMap is deprecated\. Please use TYPE_MAP instead\.",
+    'ignore',
+    message=r'typeMap is deprecated\. Please use TYPE_MAP instead\.',
     category=DeprecationWarning,
 )
+
+import contextlib
 
 from ldap3 import BASE, NONE, SUBTREE, Connection, Server, Tls
 from ldap3.core.exceptions import LDAPException
@@ -41,22 +42,22 @@ def _escape_ldap(value: str) -> str:
     """
     # Encode to UTF-8 and escape byte-by-byte for full RFC 4515 compliance.
     result = []
-    for byte in value.encode("utf-8"):
-        if byte == 0x5C:   # backslash
-            result.append("\\5c")
+    for byte in value.encode('utf-8'):
+        if byte == 0x5C:  # backslash
+            result.append('\\5c')
         elif byte == 0x2A:  # asterisk
-            result.append("\\2a")
+            result.append('\\2a')
         elif byte == 0x28:  # left paren
-            result.append("\\28")
+            result.append('\\28')
         elif byte == 0x29:  # right paren
-            result.append("\\29")
+            result.append('\\29')
         elif byte == 0x00:  # NUL
-            result.append("\\00")
+            result.append('\\00')
         elif byte < 0x20 or byte > 0x7E:  # non-printable / non-ASCII
-            result.append(f"\\{byte:02x}")
+            result.append(f'\\{byte:02x}')
         else:
             result.append(chr(byte))
-    return "".join(result)
+    return ''.join(result)
 
 
 def _build_user_filter(template: str, username: str) -> str:
@@ -66,12 +67,12 @@ def _build_user_filter(template: str, username: str) -> str:
     braces in the template cannot cause unexpected interpolation or
     injection should an admin accidentally include them in the filter.
     """
-    return template.replace("{username}", username)
+    return template.replace('{username}', username)
 
 
-def _build_tls(config: LDAPSettings) -> Optional[Tls]:
+def _build_tls(config: LDAPSettings) -> Tls | None:
     """Build an ldap3 Tls object from config if any TLS settings are specified."""
-    is_ldaps = config.url.lower().startswith("ldaps://")
+    is_ldaps = config.url.lower().startswith('ldaps://')
     needs_tls = (
         is_ldaps
         or config.use_starttls
@@ -83,9 +84,9 @@ def _build_tls(config: LDAPSettings) -> Optional[Tls]:
         return None
 
     validate_map = {
-        "NONE": ssl.CERT_NONE,
-        "OPTIONAL": ssl.CERT_OPTIONAL,
-        "REQUIRED": ssl.CERT_REQUIRED,
+        'NONE': ssl.CERT_NONE,
+        'OPTIONAL': ssl.CERT_OPTIONAL,
+        'REQUIRED': ssl.CERT_REQUIRED,
     }
     validate = validate_map.get(config.tls_validate.upper(), ssl.CERT_REQUIRED)
 
@@ -121,24 +122,20 @@ class _LDAPConnectionPool:
 
     def _release(self) -> None:
         """Release a pool slot."""
-        try:
+        with contextlib.suppress(ValueError):
             self._semaphore.release()
-        except ValueError:
-            pass
 
     def _get_conn(self) -> Connection:
         now = time.monotonic()
-        conn: Optional[Connection] = getattr(self._local, "conn", None)
-        last_used: float = getattr(self._local, "last_used", 0.0)
+        conn: Connection | None = getattr(self._local, 'conn', None)
+        last_used: float = getattr(self._local, 'last_used', 0.0)
 
         if conn is not None:
             # Proactive keepalive: if the connection has been idle too
             # long, refresh it to avoid stale-connection errors.
             if now - last_used > _POOL_KEEPALIVE_INTERVAL:
-                try:
+                with contextlib.suppress(LDAPException):
                     conn.unbind()
-                except LDAPException:
-                    pass
                 conn = None
                 self._release()
             elif not conn.bound:
@@ -172,12 +169,10 @@ class _LDAPConnectionPool:
         return conn
 
     def release(self) -> None:
-        conn: Optional[Connection] = getattr(self._local, "conn", None)
+        conn: Connection | None = getattr(self._local, 'conn', None)
         if conn:
-            try:
+            with contextlib.suppress(LDAPException):
                 conn.unbind()
-            except LDAPException:
-                pass
             self._local.conn = None
         self._release()
 
@@ -196,51 +191,51 @@ class LDAPAuthenticator:
         self.server = Server(config.url, connect_timeout=config.timeout, get_info=NONE, tls=self.tls)
         self._pool = _LDAPConnectionPool(config)
 
-        if config.tls_validate.upper() == "NONE":
+        if config.tls_validate.upper() == 'NONE':
             if config.block_tls_verify_none:
                 raise ValueError(
-                    "TLS certificate validation is set to NONE, which is "
-                    "insecure and enables MITM attacks. "
-                    "Set tls_validate=REQUIRED or disable block_tls_verify_none."
+                    'TLS certificate validation is set to NONE, which is '
+                    'insecure and enables MITM attacks. '
+                    'Set tls_validate=REQUIRED or disable block_tls_verify_none.'
                 )
             log.error(
-                "LDAP TLS certificate validation is DISABLED (tls_validate=NONE). "
-                "This is insecure and enables MITM attacks. Use tls_validate=REQUIRED in production."
+                'LDAP TLS certificate validation is DISABLED (tls_validate=NONE). '
+                'This is insecure and enables MITM attacks. Use tls_validate=REQUIRED in production.'
             )
-        if config.url.lower().startswith("ldap://") and not config.use_starttls:
+        if config.url.lower().startswith('ldap://') and not config.use_starttls:
             if config.block_plaintext_ldap:
                 raise ValueError(
-                    "Plaintext LDAP (ldap://) without STARTTLS is blocked by "
-                    "block_plaintext_ldap=True. Use ldaps:// or enable use_starttls."
+                    'Plaintext LDAP (ldap://) without STARTTLS is blocked by '
+                    'block_plaintext_ldap=True. Use ldaps:// or enable use_starttls.'
                 )
             log.error(
-                "Using plain LDAP (ldap://) without STARTTLS. "
-                "Credentials will be transmitted in cleartext. "
-                "Use ldaps:// or enable use_starttls in production."
+                'Using plain LDAP (ldap://) without STARTTLS. '
+                'Credentials will be transmitted in cleartext. '
+                'Use ldaps:// or enable use_starttls in production.'
             )
 
         if config.follow_referrals:
             if config.referral_allowed_hosts:
                 log.info(
-                    "follow_referrals is enabled with referral_allowed_hosts=%s. "
-                    "Only referrals to these hosts will be followed.",
+                    'follow_referrals is enabled with referral_allowed_hosts=%s. '
+                    'Only referrals to these hosts will be followed.',
                     config.referral_allowed_hosts,
                 )
             elif config.block_unrestricted_referrals:
                 raise ValueError(
-                    "follow_referrals is enabled but referral_allowed_hosts is empty. "
-                    "This would allow a malicious LDAP server to return referrals to "
-                    "internal network addresses (SSRF risk). Either set "
-                    "referral_allowed_hosts or disable follow_referrals. "
-                    "To override, set block_unrestricted_referrals=False."
+                    'follow_referrals is enabled but referral_allowed_hosts is empty. '
+                    'This would allow a malicious LDAP server to return referrals to '
+                    'internal network addresses (SSRF risk). Either set '
+                    'referral_allowed_hosts or disable follow_referrals. '
+                    'To override, set block_unrestricted_referrals=False.'
                 )
             else:
                 log.error(
-                    "follow_referrals is enabled with no referral_allowed_hosts set. "
-                    "A malicious LDAP server could return referrals to internal "
-                    "network addresses (SSRF risk). Set referral_allowed_hosts to "
-                    "restrict which referral targets are allowed, or disable "
-                    "follow_referrals unless explicitly required."
+                    'follow_referrals is enabled with no referral_allowed_hosts set. '
+                    'A malicious LDAP server could return referrals to internal '
+                    'network addresses (SSRF risk). Set referral_allowed_hosts to '
+                    'restrict which referral targets are allowed, or disable '
+                    'follow_referrals unless explicitly required.'
                 )
 
     def _connect(self, user: str, password: str) -> Connection:
@@ -266,8 +261,12 @@ class LDAPAuthenticator:
         return hostname.lower() in [h.lower() for h in self.config.referral_allowed_hosts]
 
     def _follow_search_referrals(
-        self, conn: Connection, search_base: str, search_filter: str,
-        search_scope: str, attributes=None,
+        self,
+        conn: Connection,
+        search_base: str,
+        search_filter: str,
+        search_scope: str,
+        attributes=None,
     ) -> None:
         """Follow LDAP referrals from a search result, validating against allowed hosts.
 
@@ -275,7 +274,7 @@ class LDAPAuthenticator:
         Modifies conn.entries and conn.result in place with the first successful
         referral result. Silently skips disallowed and unreachable referrals.
         """
-        referrals = conn.result.get("referrals")
+        referrals = conn.result.get('referrals')
         if not referrals:
             return
         for ref_url in referrals:
@@ -285,13 +284,15 @@ class LDAPAuthenticator:
                     continue
                 if not self._is_referral_allowed(parsed.hostname):
                     log.warning(
-                        "LDAP referral to %s is not in referral_allowed_hosts — blocked",
+                        'LDAP referral to %s is not in referral_allowed_hosts — blocked',
                         parsed.hostname,
                     )
                     continue
-                log.debug("Following LDAP referral to %s", parsed.hostname)
+                log.debug('Following LDAP referral to %s', parsed.hostname)
                 ref_server = Server(
-                    ref_url, connect_timeout=self.config.timeout, get_info=NONE,
+                    ref_url,
+                    connect_timeout=self.config.timeout,
+                    get_info=NONE,
                     tls=self.tls,
                 )
                 ref_conn = Connection(
@@ -305,15 +306,15 @@ class LDAPAuthenticator:
                 if self.config.use_starttls:
                     ref_conn.start_tls()
                 ref_conn.bind()
-                ref_base = parsed.path.lstrip("/") if parsed.path else search_base
+                ref_base = parsed.path.lstrip('/') if parsed.path else search_base
                 ref_conn.search(
                     search_base=ref_base,
                     search_filter=search_filter,
-                    search_scope=search_scope,
+                    search_scope=search_scope,  # type: ignore[arg-type]
                     attributes=attributes,
                 )
                 if ref_conn.entries:
-                    conn.entries = ref_conn.entries
+                    conn.entries = ref_conn.entries  # type: ignore[attr-defined]
                 conn.result = ref_conn.result
                 ref_conn.unbind()
                 return
@@ -336,9 +337,7 @@ class LDAPAuthenticator:
         Returns:
             True if authentication successful, False otherwise
         """
-        return await asyncio.to_thread(
-            self._authenticate_sync, username, password
-        )
+        return await asyncio.to_thread(self._authenticate_sync, username, password)
 
     _MIN_AUTH_TIME = 0.5  # minimum seconds for auth path to prevent timing leaks
 
@@ -356,12 +355,13 @@ class LDAPAuthenticator:
         # Step 1: Optional local allowlist check.
         # Pad to _MIN_AUTH_TIME on rejection so an attacker cannot use
         # timing to distinguish allowlist membership from other failures.
-        if self.config.allowed_users is not None:
-            if username.lower() not in [u.lower() for u in self.config.allowed_users]:
-                _elapsed = time.time() - _start
-                _remaining = max(0.0, self._MIN_AUTH_TIME - _elapsed)
-                time.sleep(_remaining)
-                return False
+        if self.config.allowed_users is not None and username.lower() not in [
+            u.lower() for u in self.config.allowed_users
+        ]:
+            _elapsed = time.time() - _start
+            _remaining = max(0.0, self._MIN_AUTH_TIME - _elapsed)
+            time.sleep(_remaining)
+            return False
 
         auth_ok = False
         user_dn = None
@@ -391,7 +391,7 @@ class LDAPAuthenticator:
                 time.sleep(_remaining)
             elif len(conn.entries) != 1:
                 log.warning(
-                    "LDAP user_filter returned %d entries; refusing ambiguous login",
+                    'LDAP user_filter returned %d entries; refusing ambiguous login',
                     len(conn.entries),
                 )
                 _elapsed = time.time() - _start
@@ -413,12 +413,12 @@ class LDAPAuthenticator:
                 time.sleep(_remaining)
 
         except LDAPException:
-            log.debug("LDAP authentication failed")
+            log.debug('LDAP authentication failed')
             _elapsed = time.time() - _start
             _remaining = max(0.0, self._MIN_AUTH_TIME - _elapsed)
             time.sleep(_remaining)
         except Exception as e:
-            log.warning("Unexpected error during LDAP authentication: %s", e)
+            log.warning('Unexpected error during LDAP authentication: %s', e)
             _elapsed = time.time() - _start
             _remaining = max(0.0, self._MIN_AUTH_TIME - _elapsed)
             time.sleep(_remaining)
@@ -429,10 +429,11 @@ class LDAPAuthenticator:
         # wrong-password failures and right-password-but-wrong-group failures.
         if self.config.group_dn:
             if auth_ok:
+                assert user_dn is not None
                 if not self._check_group_membership(user_dn):
                     return False
             else:
-                self._check_group_membership("cn=nonexistent,dc=invalid")
+                self._check_group_membership('cn=nonexistent,dc=invalid')
             return auth_ok
 
         return auth_ok
@@ -446,48 +447,50 @@ class LDAPAuthenticator:
         Returns:
             True if user is in group (or no group configured), False otherwise
         """
+        assert self.config.group_dn is not None
         try:
             conn = self._pool._get_conn()
             # Search for the group entry and retrieve its member attributes
             conn.search(
                 search_base=self.config.group_dn,
-                search_filter="(objectClass=groupOfNames)",
+                search_filter='(objectClass=groupOfNames)',
                 search_scope=BASE,
-                attributes=["member", "uniqueMember", "memberOf"],
+                attributes=['member', 'uniqueMember', 'memberOf'],
             )
             if self.config.follow_referrals and self.config.referral_allowed_hosts:
                 self._follow_search_referrals(
-                    conn, self.config.group_dn, "(objectClass=groupOfNames)", BASE,
-                    attributes=["member", "uniqueMember", "memberOf"],
+                    conn,
+                    self.config.group_dn,
+                    '(objectClass=groupOfNames)',
+                    BASE,
+                    attributes=['member', 'uniqueMember', 'memberOf'],
                 )
             if not conn.entries:
                 # Fallback: try a broader search for Active Directory groups
                 conn.search(
                     search_base=self.config.group_dn,
-                    search_filter="(objectClass=*)",
+                    search_filter='(objectClass=*)',
                     search_scope=BASE,
-                    attributes=["member", "uniqueMember", "memberOf"],
+                    attributes=['member', 'uniqueMember', 'memberOf'],
                 )
                 if not conn.entries:
                     return False
 
             group = conn.entries[0]
             members = set()
-            for attr in ("member", "uniqueMember"):
+            for attr in ('member', 'uniqueMember'):
                 if attr in group:
                     members.update(str(v) for v in group[attr].values)
             return user_dn in members
 
         except LDAPException as e:
-            log.debug("LDAP group membership check failed: %s", e)
+            log.debug('LDAP group membership check failed: %s', e)
             return False
         except Exception as e:
-            log.warning("Unexpected error during group membership check: %s", e)
+            log.warning('Unexpected error during group membership check: %s', e)
             return False
 
     def close(self) -> None:
         """Release the service-account connection pool."""
-        try:
+        with contextlib.suppress(Exception):
             self._pool.release()
-        except Exception:
-            pass

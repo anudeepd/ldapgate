@@ -10,7 +10,6 @@ import stat
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 from ldapgate._signer import BadSignature, TimedSigner
 
@@ -21,15 +20,26 @@ def _is_weak_secret(secret: str) -> bool:
     if len(secret) < 32:
         return True
     weak_indicators = [
-        "change-me", "local-dev-secret", "test-secret", "not-for-production",
-        "replace-me", "default", "secret", "password", "123456", "abcdef",
-        "qwerty", "admin", "root", "ldapgate", "ldap", "proxy",
+        'change-me',
+        'local-dev-secret',
+        'test-secret',
+        'not-for-production',
+        'replace-me',
+        'default',
+        'secret',
+        'password',
+        '123456',
+        'abcdef',
+        'qwerty',
+        'admin',
+        'root',
+        'ldapgate',
+        'ldap',
+        'proxy',
     ]
     if any(indicator in secret.lower() for indicator in weak_indicators):
         return True
-    if len(set(secret)) < 8:
-        return True
-    return False
+    return len(set(secret)) < 8
 
 
 class _RevocationStore:
@@ -38,16 +48,14 @@ class _RevocationStore:
     Falls back to in-memory only if no shared path is provided.
     """
 
-    def __init__(self, path: Optional[Path] = None, ttl: int = 3600):
+    def __init__(self, path: Path | None = None, ttl: int = 3600):
         self._path = path
         self._ttl = ttl
         self._revoked: dict[str, float] = {}
-        self._lock_fd: Optional[int] = None
+        self._lock_fd: int | None = None
 
     def _prune(self, now: float) -> None:
-        self._revoked = {
-            token: expiry for token, expiry in self._revoked.items() if expiry > now
-        }
+        self._revoked = {token: expiry for token, expiry in self._revoked.items() if expiry > now}
 
     def _locked_load_and_save(self, extra: dict[str, float]) -> None:
         """Atomically load, merge, prune, and save the shared file under lock.
@@ -70,9 +78,9 @@ class _RevocationStore:
             st = os.fstat(fd)
             if stat.S_IMODE(st.st_mode) & 0o177:
                 log.error(
-                    "Revocation file %s has insecure permissions (%s). "
-                    "Expected 0o600. Refusing to use it.",
-                    self._path, oct(stat.S_IMODE(st.st_mode)),
+                    'Revocation file %s has insecure permissions (%s). Expected 0o600. Refusing to use it.',
+                    self._path,
+                    oct(stat.S_IMODE(st.st_mode)),
                 )
                 return
             fcntl.flock(fd, fcntl.LOCK_EX)
@@ -84,11 +92,8 @@ class _RevocationStore:
                     if not chunk:
                         break
                     raw_parts.append(chunk)
-                raw = b"".join(raw_parts)
-                if raw:
-                    data = json.loads(raw.decode())
-                else:
-                    data = {}
+                raw = b''.join(raw_parts)
+                data = json.loads(raw.decode()) if raw else {}
             except (json.JSONDecodeError, UnicodeDecodeError):
                 data = {}
             if not isinstance(data, dict):
@@ -125,10 +130,17 @@ class _RevocationStore:
 class SessionManager:
     """Manages signed session cookies without external storage."""
 
-    COOKIE_NAME = "ldapgate_session"
+    COOKIE_NAME = 'ldapgate_session'
 
-    def __init__(self, secret_key: str, session_ttl: int = 3600, revocation_path: Optional[str] = None,
-                 max_sessions_per_user: int = 0, bind_client: bool = True, idle_timeout: int = 0):
+    def __init__(
+        self,
+        secret_key: str,
+        session_ttl: int = 3600,
+        revocation_path: str | None = None,
+        max_sessions_per_user: int = 0,
+        bind_client: bool = True,
+        idle_timeout: int = 0,
+    ):
         """Initialize session manager.
 
         Args:
@@ -145,12 +157,12 @@ class SessionManager:
         """
         if _is_weak_secret(secret_key):
             raise ValueError(
-                "Secret key is too weak for production use. "
-                "Generate a secure key with: "
+                'Secret key is too weak for production use. '
+                'Generate a secure key with: '
                 "python -c 'import secrets; print(secrets.token_urlsafe(32))'"
             )
         self.serializer = TimedSigner(secret_key)
-        self._csrf_serializer = TimedSigner(secret_key, salt="ldapgate-csrf")
+        self._csrf_serializer = TimedSigner(secret_key, salt='ldapgate-csrf')
         self.session_ttl = session_ttl
         self._revocation = _RevocationStore(
             path=Path(revocation_path) if revocation_path else None,
@@ -175,8 +187,8 @@ class SessionManager:
     def _client_hash(self, client_ip: str, user_agent: str) -> str:
         """Bind session to client IP and User-Agent to prevent cookie replay."""
         if not self.bind_client:
-            return ""
-        payload = f"{client_ip}:{user_agent}"
+            return ''
+        payload = f'{client_ip}:{user_agent}'
         return hashlib.sha256(payload.encode()).hexdigest()[:32]
 
     def _cookie_id(self, cookie_value: str) -> str:
@@ -218,7 +230,7 @@ class SessionManager:
             sessions[cid] = (cookie_value, now)
             if len(sessions) > self.max_sessions_per_user:
                 sorted_cids = sorted(sessions, key=lambda c: sessions[c][1])
-                for old_cid in sorted_cids[:-self.max_sessions_per_user]:
+                for old_cid in sorted_cids[: -self.max_sessions_per_user]:
                     old_cookie, _ = sessions[old_cid]
                     self._revocation.add(old_cookie)
                     del sessions[old_cid]
@@ -238,7 +250,7 @@ class SessionManager:
                 if not sessions:
                     del self._user_sessions[username]
 
-    def create_session(self, username: str, client_ip: str = "", user_agent: str = "") -> str:
+    def create_session(self, username: str, client_ip: str = '', user_agent: str = '') -> str:
         """Create signed session cookie value.
 
         Args:
@@ -250,11 +262,11 @@ class SessionManager:
             Signed, URL-safe cookie value
         """
         if len(username) > self.MAX_USERNAME_LENGTH:
-            raise ValueError(f"Username exceeds maximum length of {self.MAX_USERNAME_LENGTH}")
+            raise ValueError(f'Username exceeds maximum length of {self.MAX_USERNAME_LENGTH}')
         payload = {
-            "u": username,
-            "c": self._client_hash(client_ip, user_agent),
-            "n": os.urandom(16).hex(),   # random nonce ensures uniqueness
+            'u': username,
+            'c': self._client_hash(client_ip, user_agent),
+            'n': os.urandom(16).hex(),  # random nonce ensures uniqueness
         }
         cookie = self.serializer.dumps(payload)
         now = time.monotonic()
@@ -262,7 +274,7 @@ class SessionManager:
         self._track_session(cookie, username, now)
         return cookie
 
-    def verify_session(self, cookie_value: Optional[str], client_ip: str = "", user_agent: str = "") -> Optional[str]:
+    def verify_session(self, cookie_value: str | None, client_ip: str = '', user_agent: str = '') -> str | None:
         """Verify and extract username from session cookie.
 
         Args:
@@ -285,8 +297,8 @@ class SessionManager:
             payload = self.serializer.loads(cookie_value, max_age=self.session_ttl)
             if not isinstance(payload, dict):
                 return None
-            username = payload.get("u")
-            expected_hash = payload.get("c")
+            username = payload.get('u')
+            expected_hash = payload.get('c')
             if not username:
                 return None
             # If session was created with client binding, verify it
@@ -308,7 +320,7 @@ class SessionManager:
         except BadSignature:
             return None
 
-    def revoke_session(self, cookie_value: Optional[str], username: Optional[str] = None) -> None:
+    def revoke_session(self, cookie_value: str | None, username: str | None = None) -> None:
         """Revoke a session cookie so it can no longer be used.
 
         Args:
@@ -322,22 +334,18 @@ class SessionManager:
             try:
                 payload = self.serializer.loads(cookie_value)
                 if isinstance(payload, dict):
-                    username = payload.get("u")
+                    username = payload.get('u')
             except BadSignature:
                 pass
         self._revocation.add(cookie_value)
         if username:
             self._untrack_session(cookie_value, username)
 
-    def generate_csrf_token(self, client_ip: str = "") -> str:
+    def generate_csrf_token(self, client_ip: str = '') -> str:
         """Generate a signed CSRF token bound to the client IP."""
         nonce = base64.b64encode(os.urandom(12)).decode()
-        fingerprint = (
-            hashlib.sha256(client_ip.encode()).hexdigest()[:16]
-            if self.bind_client and client_ip
-            else ""
-        )
-        return self._csrf_serializer.dumps({"n": nonce, "f": fingerprint})
+        fingerprint = hashlib.sha256(client_ip.encode()).hexdigest()[:16] if self.bind_client and client_ip else ''
+        return self._csrf_serializer.dumps({'n': nonce, 'f': fingerprint})
 
     def _prune_csrf_used(self, now: float) -> None:
         """Remove expired entries from the consumed CSRF token set."""
@@ -346,7 +354,7 @@ class SessionManager:
             for k in expired:
                 del self._csrf_used[k]
 
-    def validate_csrf_token(self, token: Optional[str], client_ip: str = "") -> bool:
+    def validate_csrf_token(self, token: str | None, client_ip: str = '') -> bool:
         """Validate a CSRF token, verifying client IP binding if present.
 
         Each token is single-use: once validated it is recorded and any
@@ -358,14 +366,14 @@ class SessionManager:
             data = self._csrf_serializer.loads(token, max_age=self.session_ttl)
             if not isinstance(data, dict):
                 return False
-            stored_fp = data.get("f", "")
+            stored_fp = data.get('f', '')
             if stored_fp and client_ip:
                 current_fp = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
                 if current_fp != stored_fp:
                     return False
             # Use the nonce as the per-token key so each issued token can only
             # be validated once, preventing replay within the TTL window.
-            nonce = data.get("n", "")
+            nonce = data.get('n', '')
             token_key = hashlib.sha256(nonce.encode()).hexdigest()
             now = time.monotonic()
             self._prune_csrf_used(now)
