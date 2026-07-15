@@ -12,6 +12,7 @@ from starlette.testclient import TestClient
 from ldapgate.config import LDAPConfig, LDAPSettings, ProxySettings
 from ldapgate.middleware import LDAPAuthMiddleware, add_ldap_auth
 from ldapgate.proxy import (
+    LOGIN_FORM_HTML,
     ProxyApp,
     _add_security_headers,
     _https_required_response,
@@ -91,6 +92,13 @@ def test_login_page_accepts_safe_error_param(client):
     resp = client.get('/_auth/login?error=invalid')
     assert resp.status_code == 200
     assert 'Invalid username or password' in resp.text
+    assert 'id="password-toggle" aria-label="Show password"' in resp.text
+    assert "password.type = visible ? 'password' : 'text';" in resp.text
+
+
+def test_inline_login_fallback_includes_password_toggle():
+    assert 'id="password-toggle" aria-label="Show password"' in LOGIN_FORM_HTML
+    assert "password.type = visible ? 'password' : 'text';" in LOGIN_FORM_HTML
 
 
 def test_secure_transport_required_for_http_requests():

@@ -134,6 +134,14 @@ LOGIN_FORM_HTML = """
             transition: border-color 0.2s, outline-offset 0.2s;
         }
         input:focus { outline: 2px solid #667eea; outline-offset: 2px; border-color: #667eea; }
+        .password-control { position: relative; }
+        .password-control input { padding-right: 2.75rem; }
+        .password-toggle { position: absolute; top: 50%; right: 0.375rem; transform: translateY(-50%); display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #4a5568; cursor: pointer; }
+        .password-toggle:hover { color: #1a202c; background: #edf2f7; }
+        .password-toggle:focus-visible { outline: 2px solid #667eea; outline-offset: 1px; }
+        .password-toggle .eye-slash { display: none; }
+        .password-toggle[data-visible="true"] .eye-slash { display: block; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
         button {
             width: 100%;
             padding: 10px;
@@ -177,7 +185,13 @@ LOGIN_FORM_HTML = """
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
+                <div class="password-control">
+                    <input type="password" id="password" name="password" required>
+                    <button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" aria-pressed="false">
+                        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m3 3 18 18"/></svg>
+                        <span class="sr-only">Show password</span>
+                    </button>
+                </div>
             </div>
             {% if redirect %}<input type="hidden" name="redirect" value="{{ redirect }}">{% endif %}
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -185,6 +199,19 @@ LOGIN_FORM_HTML = """
         </form>
         <div class="powered-by">Powered by <a href="https://github.com/anudeepd/ldapgate" tabindex="-1">LDAPGate</a></div>
     </div>
+    <script nonce="{{ csrf_nonce }}">
+        const password = document.getElementById('password');
+        const passwordToggle = document.getElementById('password-toggle');
+        passwordToggle.addEventListener('click', function() {
+            const visible = password.type === 'text';
+            password.type = visible ? 'password' : 'text';
+            passwordToggle.dataset.visible = String(!visible);
+            passwordToggle.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
+            passwordToggle.setAttribute('aria-pressed', String(!visible));
+            passwordToggle.querySelector('.sr-only').textContent = visible ? 'Show password' : 'Hide password';
+            password.focus();
+        });
+    </script>
 </body>
 </html>
 """
