@@ -52,3 +52,4 @@ ldap_check.py
 docs/
 TODO.md
 .claude/
+.gstack/
