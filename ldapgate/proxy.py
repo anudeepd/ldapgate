@@ -89,127 +89,82 @@ _SAFE_ERROR_MESSAGES = {
 # Inline HTML fallback if template is not available
 LOGIN_FORM_HTML = """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign in to {{ app_name }}</title>
+    <title>Sign in{% if app_name %} — {{ app_name }}{% endif %}</title>
     <style nonce="{{ csrf_nonce }}">
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #333;
-        }
-        @media (prefers-color-scheme: dark) {
-            body { background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%); color: #e2e8f0; }
-            .card { background: #2d3748; border-color: #4a5568; }
-            input { background: #1a202c; border-color: #4a5568; color: #e2e8f0; }
-            button { background: #667eea; }
-            button:hover { background: #5568d3; }
-            .error { background: #742a2a; border-color: #c53030; color: #fed7d7; }
-        }
-        .card {
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-            width: 100%;
-            max-width: 400px;
-            border: 1px solid #e2e8f0;
-        }
-        h1 { font-size: 24px; margin-bottom: 30px; text-align: center; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
-        input {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #cbd5e0;
-            border-radius: 4px;
-            font-size: 14px;
-            transition: border-color 0.2s, outline-offset 0.2s;
-        }
-        input:focus { outline: 2px solid #667eea; outline-offset: 2px; border-color: #667eea; }
-        .password-control { position: relative; }
-        .password-control input { padding-right: 2.75rem; }
-        .password-toggle { position: absolute; top: 50%; right: 0.375rem; transform: translateY(-50%); display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #4a5568; cursor: pointer; }
-        .password-toggle:hover { color: #1a202c; background: #edf2f7; }
-        .password-toggle:focus-visible { outline: 2px solid #667eea; outline-offset: 1px; }
-        .password-toggle .eye-slash { display: none; }
-        .password-toggle[data-visible="true"] .eye-slash { display: block; }
-        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-        button {
-            width: 100%;
-            padding: 10px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        button:hover { background: #5568d3; }
-        button:disabled { opacity: 0.6; cursor: not-allowed; }
-        .error {
-            background: #fed7d7;
-            border: 1px solid #fc8181;
-            color: #c53030;
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .error button { width: auto; padding: 0; background: none; color: inherit; text-decoration: underline; }
-        .powered-by { margin-top: 1.5rem; text-align: center; font-size: 0.72rem; color: #475569; }
-        .powered-by a { color: #64748b; text-decoration: none; }
-        .powered-by a:hover { color: #94a3b8; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #020617; color: #f1f5f9; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; -webkit-font-smoothing: antialiased; }
+        .login-shell { position: relative; width: 100%; max-width: 380px; }
+        .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; box-shadow: 0 25px 50px -12px rgb(0 0 0 / .6); padding: 2.5rem 2rem; width: 100%; max-width: 380px; animation: ldapgate-card-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .header { text-align: center; margin-bottom: 2rem; }
+        .app-name { font-size: 1.25rem; font-weight: 600; color: #f1f5f9; letter-spacing: -0.025em; }
+        .subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.3rem; }
+        .feedback-slot { position: absolute; inset-inline: 0; bottom: calc(100% + 0.75rem); pointer-events: none; }
+        .error { background: #1c0505; border: 1px solid #7f1d1d; color: #fca5a5; border-radius: 8px; padding: 0.7rem 0.875rem; font-size: 0.8125rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 14px 30px -18px rgb(0 0 0 / .85); animation: ldapgate-alert-in 260ms cubic-bezier(0.16, 1, 0.3, 1) 70ms both; }
+        .error-icon { flex-shrink: 0; }
+        .field { margin-bottom: 1.125rem; }
+        label { display: block; font-size: 0.6875rem; font-weight: 500; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
+        input[type="text"], input[type="password"] { width: 100%; background: #1e293b; border: 1px solid #334155; color: #f1f5f9; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 0.875rem; line-height: 1.25rem; min-height: 40px; padding: 0.625rem 0.75rem; border-radius: 8px; outline: none; transition: border-color 0.15s, box-shadow 0.15s; appearance: none; -webkit-appearance: none; }
+        input[type="text"]:focus, input[type="password"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgb(59 130 246 / .18); }
+        .submit-wrap { margin-top: 1.5rem; }
+        button[type="submit"] { width: 100%; background: #2563eb; color: #ffffff; font-family: inherit; font-size: 0.875rem; font-weight: 600; line-height: 1.25rem; min-height: 40px; padding: 0.65rem 1rem; border: none; border-radius: 8px; cursor: pointer; transition: background 0.15s, transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        button[type="submit"]:hover:not(:disabled) { background: #3b82f6; }
+        button[type="submit"]:active:not(:disabled) { transform: scale(0.99); }
+        button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
+        .spinner { display: none; width: 15px; height: 15px; border: 2px solid rgb(255 255 255 / .25); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
+        button[type="submit"].loading .spinner { display: block; }
+        .submit-label { min-width: 4.75rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes ldapgate-card-in { 0% { opacity: 0; transform: translateY(-12px) scale(.94); filter: blur(2px); } 60% { opacity: 1; transform: translateY(1px) scale(1.01); filter: blur(0); } 100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
+        @keyframes ldapgate-alert-in { from { opacity: 0; transform: translateY(10px) scale(.985); } 70% { opacity: 1; transform: translateY(-1px) scale(1); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .powered-by { margin-top: 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0.375rem; font-size: 0.72rem; line-height: 1; color: #94a3b8; }
+        .security-lock { width: 14px; height: 14px; flex-shrink: 0; color: currentColor; }
+        .powered-by span { white-space: nowrap; }
+        .powered-by a { color: #cbd5e1; text-decoration: none; }
+        .powered-by a:hover { color: #f1f5f9; }
+        @media (prefers-reduced-motion: reduce) { .card, .error, .spinner { animation: none; } button[type="submit"] { transition: none; } }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Sign in to {{ app_name }}</h1>
-        {% if error %}<div class="error">{{ error }} <button onclick="this.parentElement.style.display='none'">×</button></div>{% endif %}
-        <form method="POST" action="{{ login_path }}">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <div class="password-control">
-                    <input type="password" id="password" name="password" required>
-                    <button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" aria-pressed="false">
-                        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m3 3 18 18"/></svg>
-                        <span class="sr-only">Show password</span>
-                    </button>
-                </div>
-            </div>
-            {% if redirect %}<input type="hidden" name="redirect" value="{{ redirect }}">{% endif %}
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit">Sign in</button>
-        </form>
-        <div class="powered-by">Powered by <a href="https://github.com/anudeepd/ldapgate" tabindex="-1">LDAPGate</a></div>
+    <div class="login-shell">
+        {% if error %}<div class="feedback-slot" aria-live="polite"><div class="error" id="login-error"><svg class="error-icon" width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M7.5 1a6.5 6.5 0 1 0 0 13A6.5 6.5 0 0 0 7.5 1ZM7 4.5a.5.5 0 0 1 1 0v4a.5.5 0 0 1-1 0v-4Zm.5 6.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" fill="currentColor"/></svg>{{ error }}</div></div>{% endif %}
+        <div class="card">
+            <div class="header"><div class="app-name">{{ app_name or "LDAPGate" }}</div><div class="subtitle">Enter your credentials to continue</div></div>
+            <form method="POST" action="{{ login_path }}" id="login-form">
+                {% if redirect %}<input type="hidden" name="redirect" value="{{ redirect }}">{% endif %}
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="field"><label for="username">Username</label><input type="text" id="username" name="username" autocomplete="username" autofocus required></div>
+                <div class="field"><label for="password">Password</label><input type="password" id="password" name="password" autocomplete="current-password" required></div>
+                <div class="submit-wrap"><button type="submit" id="submit-btn"><span class="spinner" aria-hidden="true"></span><span class="submit-label" aria-live="polite">Sign in</span></button></div>
+            </form>
+            <div class="powered-by"><svg class="security-lock" aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="11" height="8" rx="2"/><path d="M7 8V5.75a3 3 0 0 1 6 0V8"/></svg><span>Secured by <a href="https://github.com/anudeepd/ldapgate">LDAPGate</a></span></div>
+        </div>
     </div>
     <script nonce="{{ csrf_nonce }}">
+        const loginForm = document.getElementById('login-form');
+        const username = document.getElementById('username');
         const password = document.getElementById('password');
-        const passwordToggle = document.getElementById('password-toggle');
-        passwordToggle.addEventListener('click', function() {
-            const visible = password.type === 'text';
-            password.type = visible ? 'password' : 'text';
-            passwordToggle.dataset.visible = String(!visible);
-            passwordToggle.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
-            passwordToggle.setAttribute('aria-pressed', String(!visible));
-            passwordToggle.querySelector('.sr-only').textContent = visible ? 'Show password' : 'Hide password';
-            password.focus();
+        const usernameStorageKey = 'ldapgate:login:username';
+        const savedUsername = sessionStorage.getItem(usernameStorageKey);
+        let loginSubmitting = false;
+        if (document.getElementById('login-error') && savedUsername) { username.value = savedUsername; }
+        if (password) { password.value = ''; }
+        username.addEventListener('input', function() { sessionStorage.setItem(usernameStorageKey, username.value); });
+        loginForm.addEventListener('submit', function(event) {
+            if (loginSubmitting) return;
+            event.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const submitLabel = btn.querySelector('.submit-label');
+            sessionStorage.setItem(usernameStorageKey, username.value);
+            submitLabel.textContent = 'Signing in';
+            btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
+            btn.classList.add('loading');
+            loginSubmitting = true;
+            requestAnimationFrame(function() { requestAnimationFrame(function() { HTMLFormElement.prototype.submit.call(loginForm); }); });
         });
     </script>
 </body>

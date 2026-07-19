@@ -92,13 +92,30 @@ def test_login_page_accepts_safe_error_param(client):
     resp = client.get('/_auth/login?error=invalid')
     assert resp.status_code == 200
     assert 'Invalid username or password' in resp.text
-    assert 'id="password-toggle" aria-label="Show password"' in resp.text
-    assert "password.type = visible ? 'password' : 'text';" in resp.text
+    assert 'class="feedback-slot" aria-live="polite"' in resp.text
+    assert "ldapgate-card-in" in resp.text
+    assert "ldapgate-alert-in" in resp.text
+    assert "ldapgate:login:username" in resp.text
+    assert "Secured by" in resp.text
+    assert "security-lock" in resp.text
+    assert "Signing in" in resp.text
+    assert "appearance: none;" in resp.text
+    assert "-webkit-appearance: none;" in resp.text
+    assert 'id="password-toggle"' not in resp.text
+    assert "password.type = visible ? 'password' : 'text';" not in resp.text
 
 
-def test_inline_login_fallback_includes_password_toggle():
-    assert 'id="password-toggle" aria-label="Show password"' in LOGIN_FORM_HTML
-    assert "password.type = visible ? 'password' : 'text';" in LOGIN_FORM_HTML
+def test_inline_login_fallback_matches_modern_login_basics():
+    assert "ldapgate-card-in" in LOGIN_FORM_HTML
+    assert "ldapgate-alert-in" in LOGIN_FORM_HTML
+    assert "ldapgate:login:username" in LOGIN_FORM_HTML
+    assert "Secured by" in LOGIN_FORM_HTML
+    assert "security-lock" in LOGIN_FORM_HTML
+    assert "Signing in" in LOGIN_FORM_HTML
+    assert "appearance: none;" in LOGIN_FORM_HTML
+    assert "-webkit-appearance: none;" in LOGIN_FORM_HTML
+    assert 'id="password-toggle"' not in LOGIN_FORM_HTML
+    assert "password.type = visible ? 'password' : 'text';" not in LOGIN_FORM_HTML
 
 
 def test_secure_transport_required_for_http_requests():
