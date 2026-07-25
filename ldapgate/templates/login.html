@@ -120,6 +120,15 @@
       box-shadow: 0 0 0 3px rgb(59 130 246 / .18);
     }
 
+    /* Waterfox exposes Firefox's native reveal button after typing. Keep its
+       default control geometry so it stays aligned at field's right edge. */
+    @supports (-moz-appearance: none) {
+      input[type="password"] {
+        appearance: auto;
+        padding-right: 0.75rem;
+      }
+    }
+
     .submit-wrap { margin-top: 1.5rem; }
 
     button[type="submit"] {

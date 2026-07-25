@@ -109,6 +109,7 @@ LOGIN_FORM_HTML = """
         label { display: block; font-size: 0.6875rem; font-weight: 500; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
         input[type="text"], input[type="password"] { width: 100%; background: #1e293b; border: 1px solid #334155; color: #f1f5f9; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 0.875rem; line-height: 1.25rem; min-height: 40px; padding: 0.625rem 0.75rem; border-radius: 8px; outline: none; transition: border-color 0.15s, box-shadow 0.15s; appearance: none; -webkit-appearance: none; }
         input[type="text"]:focus, input[type="password"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgb(59 130 246 / .18); }
+        @supports (-moz-appearance: none) { input[type="password"] { appearance: auto; padding-right: 0.75rem; } }
         .submit-wrap { margin-top: 1.5rem; }
         button[type="submit"] { width: 100%; background: #2563eb; color: #ffffff; font-family: inherit; font-size: 0.875rem; font-weight: 600; line-height: 1.25rem; min-height: 40px; padding: 0.65rem 1rem; border: none; border-radius: 8px; cursor: pointer; transition: background 0.15s, transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
         button[type="submit"]:hover:not(:disabled) { background: #3b82f6; }
