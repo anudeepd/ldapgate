@@ -306,7 +306,7 @@ class LDAPAuthMiddleware(BaseHTTPMiddleware):
         if path == self.config.proxy.logout_path:
             return True
         static_prefixes = self.config.proxy.static_paths
-        return any(path == prefix or path.startswith(prefix) for prefix in static_prefixes)
+        return any(path == prefix or path.startswith(f'{prefix.rstrip("/")}/') for prefix in static_prefixes)
 
 
 def add_ldap_auth(app: FastAPI, config: LDAPConfig, template_path: str | None = None) -> SessionManager:

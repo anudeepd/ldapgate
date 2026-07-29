@@ -93,31 +93,31 @@ def test_login_page_accepts_safe_error_param(client):
     assert resp.status_code == 200
     assert 'Invalid username or password' in resp.text
     assert 'class="feedback-slot" aria-live="polite"' in resp.text
-    assert "ldapgate-card-in" in resp.text
-    assert "ldapgate-alert-in" in resp.text
-    assert "ldapgate:login:username" in resp.text
-    assert "Secured by" in resp.text
-    assert "security-lock" in resp.text
-    assert "Signing in" in resp.text
-    assert "appearance: none;" in resp.text
-    assert "-webkit-appearance: none;" in resp.text
-    assert "@supports (-moz-appearance: none)" in resp.text
-    assert "padding-right: 0.75rem;" in resp.text
+    assert 'ldapgate-card-in' in resp.text
+    assert 'ldapgate-alert-in' in resp.text
+    assert 'ldapgate:login:username' in resp.text
+    assert 'Secured by' in resp.text
+    assert 'security-lock' in resp.text
+    assert 'Signing in' in resp.text
+    assert 'appearance: none;' in resp.text
+    assert '-webkit-appearance: none;' in resp.text
+    assert '@supports (-moz-appearance: none)' in resp.text
+    assert 'padding-right: 0.75rem;' in resp.text
     assert 'id="password-toggle"' not in resp.text
     assert "password.type = visible ? 'password' : 'text';" not in resp.text
 
 
 def test_inline_login_fallback_matches_modern_login_basics():
-    assert "ldapgate-card-in" in LOGIN_FORM_HTML
-    assert "ldapgate-alert-in" in LOGIN_FORM_HTML
-    assert "ldapgate:login:username" in LOGIN_FORM_HTML
-    assert "Secured by" in LOGIN_FORM_HTML
-    assert "security-lock" in LOGIN_FORM_HTML
-    assert "Signing in" in LOGIN_FORM_HTML
-    assert "appearance: none;" in LOGIN_FORM_HTML
-    assert "-webkit-appearance: none;" in LOGIN_FORM_HTML
-    assert "@supports (-moz-appearance: none)" in LOGIN_FORM_HTML
-    assert "padding-right: 0.75rem;" in LOGIN_FORM_HTML
+    assert 'ldapgate-card-in' in LOGIN_FORM_HTML
+    assert 'ldapgate-alert-in' in LOGIN_FORM_HTML
+    assert 'ldapgate:login:username' in LOGIN_FORM_HTML
+    assert 'Secured by' in LOGIN_FORM_HTML
+    assert 'security-lock' in LOGIN_FORM_HTML
+    assert 'Signing in' in LOGIN_FORM_HTML
+    assert 'appearance: none;' in LOGIN_FORM_HTML
+    assert '-webkit-appearance: none;' in LOGIN_FORM_HTML
+    assert '@supports (-moz-appearance: none)' in LOGIN_FORM_HTML
+    assert 'padding-right: 0.75rem;' in LOGIN_FORM_HTML
     assert 'id="password-toggle"' not in LOGIN_FORM_HTML
     assert "password.type = visible ? 'password' : 'text';" not in LOGIN_FORM_HTML
 
@@ -287,6 +287,26 @@ def test_middleware_does_not_skip_app_assets_by_default():
         assert resp.status_code == 401
         assert 'Cross-Origin-Opener-Policy' not in resp.headers
         assert "font-src 'self' data:" in resp.headers['Content-Security-Policy']
+
+
+def test_middleware_static_path_does_not_expose_sibling_prefix():
+    config = _test_config()
+    config.proxy.static_paths = ['/static']
+    app = FastAPI()
+
+    @app.get('/static/app.js')
+    async def public_asset():
+        return {'public': True}
+
+    @app.get('/static-secret')
+    async def protected_sibling():
+        return {'secret': True}
+
+    app.add_middleware(LDAPAuthMiddleware, config=config)
+
+    with make_test_client(app) as tc:
+        assert tc.get('/static/app.js').status_code == 200
+        assert tc.get('/static-secret').status_code == 401
 
 
 def test_middleware_basic_auth_success_cache_reuses_ldap_auth():
