@@ -101,10 +101,12 @@ def test_login_page_accepts_safe_error_param(client):
     assert 'Signing in' in resp.text
     assert 'appearance: none;' in resp.text
     assert '-webkit-appearance: none;' in resp.text
-    assert '@supports (-moz-appearance: none)' in resp.text
-    assert 'padding-right: 0.75rem;' in resp.text
-    assert 'id="password-toggle"' not in resp.text
-    assert "password.type = visible ? 'password' : 'text';" not in resp.text
+    assert '.password-field' in resp.text
+    assert 'padding-right: 2.75rem;' in resp.text
+    assert 'class="password-toggle"' in resp.text
+    assert "password.type = visible ? 'text' : 'password';" in resp.text
+    assert 'input[type="password"]::-ms-reveal' in resp.text
+    assert 'input[type="password"]::-moz-reveal' in resp.text
 
 
 def test_inline_login_fallback_matches_modern_login_basics():
@@ -116,10 +118,12 @@ def test_inline_login_fallback_matches_modern_login_basics():
     assert 'Signing in' in LOGIN_FORM_HTML
     assert 'appearance: none;' in LOGIN_FORM_HTML
     assert '-webkit-appearance: none;' in LOGIN_FORM_HTML
-    assert '@supports (-moz-appearance: none)' in LOGIN_FORM_HTML
-    assert 'padding-right: 0.75rem;' in LOGIN_FORM_HTML
-    assert 'id="password-toggle"' not in LOGIN_FORM_HTML
-    assert "password.type = visible ? 'password' : 'text';" not in LOGIN_FORM_HTML
+    assert '.password-field' in LOGIN_FORM_HTML
+    assert 'padding-right: 2.75rem;' in LOGIN_FORM_HTML
+    assert 'class="password-toggle"' in LOGIN_FORM_HTML
+    assert "password.type = visible ? 'text' : 'password';" in LOGIN_FORM_HTML
+    assert 'input[type="password"]::-ms-reveal' in LOGIN_FORM_HTML
+    assert 'input[type="password"]::-moz-reveal' in LOGIN_FORM_HTML
 
 
 def test_secure_transport_required_for_http_requests():

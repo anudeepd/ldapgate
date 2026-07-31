@@ -109,7 +109,19 @@ LOGIN_FORM_HTML = """
         label { display: block; font-size: 0.6875rem; font-weight: 500; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
         input[type="text"], input[type="password"] { width: 100%; background: #1e293b; border: 1px solid #334155; color: #f1f5f9; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 0.875rem; line-height: 1.25rem; min-height: 40px; padding: 0.625rem 0.75rem; border-radius: 8px; outline: none; transition: border-color 0.15s, box-shadow 0.15s; appearance: none; -webkit-appearance: none; }
         input[type="text"]:focus, input[type="password"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgb(59 130 246 / .18); }
-        @supports (-moz-appearance: none) { input[type="password"] { appearance: auto; padding-right: 0.75rem; } }
+        .password-field { position: relative; }
+        .password-field input { padding-right: 2.75rem; }
+        .password-toggle { position: absolute; top: 50%; right: 0.5rem; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #64748b; cursor: pointer; transform: translateY(-50%); }
+        .password-toggle:hover { background: #334155; color: #e2e8f0; }
+        .password-toggle:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+        .password-toggle .eye-icon { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+        .password-toggle .eye-icon-closed { display: none; }
+        .password-toggle[aria-pressed="true"] .eye-icon-open { display: none; }
+        .password-toggle[aria-pressed="true"] .eye-icon-closed { display: inline-block; }
+        input[type="password"]::-ms-reveal, input[type="password"]::-ms-clear { display: none; }
+        input[type="password"]::-moz-reveal { display: none; }
+        input[type="password"]::-webkit-credentials-auto-fill-button { visibility: hidden; pointer-events: none; position: absolute; right: 0; }
+        input[type="password"]::-webkit-textfield-decoration-container { display: none; }
         .submit-wrap { margin-top: 1.5rem; }
         button[type="submit"] { width: 100%; background: #2563eb; color: #ffffff; font-family: inherit; font-size: 0.875rem; font-weight: 600; line-height: 1.25rem; min-height: 40px; padding: 0.65rem 1rem; border: none; border-radius: 8px; cursor: pointer; transition: background 0.15s, transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
         button[type="submit"]:hover:not(:disabled) { background: #3b82f6; }
@@ -138,7 +150,7 @@ LOGIN_FORM_HTML = """
                 {% if redirect %}<input type="hidden" name="redirect" value="{{ redirect }}">{% endif %}
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="field"><label for="username">Username</label><input type="text" id="username" name="username" autocomplete="username" autofocus required></div>
-                <div class="field"><label for="password">Password</label><input type="password" id="password" name="password" autocomplete="current-password" required></div>
+                <div class="field"><label for="password">Password</label><div class="password-field"><input type="password" id="password" name="password" autocomplete="current-password" required><button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" aria-controls="password" aria-pressed="false"><svg class="eye-icon eye-icon-open" aria-hidden="true" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-icon eye-icon-closed" aria-hidden="true" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.58 10.58a2 2 0 0 0 2.83 2.83"/><path d="M9.36 5.36A10.7 10.7 0 0 1 12 5c5 0 8.73 4.11 9.94 6.36a1 1 0 0 1 0 .28 15.8 15.8 0 0 1-2.44 3.42M6.61 6.61C4.47 8.03 2.99 10.2 2.06 11.65a1 1 0 0 0 0 .7C3.27 14.9 7 19 12 19c1.42 0 2.74-.32 3.91-.86"/></svg></button></div></div>
                 <div class="submit-wrap"><button type="submit" id="submit-btn"><span class="spinner" aria-hidden="true"></span><span class="submit-label" aria-live="polite">Sign in</span></button></div>
             </form>
             <div class="powered-by"><svg class="security-lock" aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="11" height="8" rx="2"/><path d="M7 8V5.75a3 3 0 0 1 6 0V8"/></svg><span>Secured by <a href="https://github.com/anudeepd/ldapgate">LDAPGate</a></span></div>
@@ -148,10 +160,18 @@ LOGIN_FORM_HTML = """
         const loginForm = document.getElementById('login-form');
         const username = document.getElementById('username');
         const password = document.getElementById('password');
+        const passwordToggle = document.getElementById('password-toggle');
         const usernameStorageKey = 'ldapgate:login:username';
         const savedUsername = sessionStorage.getItem(usernameStorageKey);
         let loginSubmitting = false;
         if (document.getElementById('login-error') && savedUsername) { username.value = savedUsername; }
+
+        passwordToggle.addEventListener('click', function() {
+            const visible = password.type === 'password';
+            password.type = visible ? 'text' : 'password';
+            passwordToggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+            passwordToggle.setAttribute('aria-pressed', String(visible));
+        });
         if (password) { password.value = ''; }
         username.addEventListener('input', function() { sessionStorage.setItem(usernameStorageKey, username.value); });
         loginForm.addEventListener('submit', function(event) {
