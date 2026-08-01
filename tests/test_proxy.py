@@ -99,14 +99,14 @@ def test_login_page_accepts_safe_error_param(client):
     assert 'Secured by' in resp.text
     assert 'security-lock' in resp.text
     assert 'Signing in' in resp.text
-    assert 'appearance: none;' in resp.text
-    assert '-webkit-appearance: none;' in resp.text
-    assert '.password-field' in resp.text
-    assert 'padding-right: 2.75rem;' in resp.text
-    assert 'class="password-toggle"' in resp.text
-    assert "password.type = visible ? 'text' : 'password';" in resp.text
-    assert 'input[type="password"]::-ms-reveal' in resp.text
-    assert 'input[type="password"]::-moz-reveal' in resp.text
+    assert 'appearance: none;' not in resp.text
+    assert '-webkit-appearance: none;' not in resp.text
+    assert '.password-field' not in resp.text
+    assert 'padding-right: 2.75rem;' not in resp.text
+    assert 'class="password-toggle"' not in resp.text
+    assert 'input[type="password"]::-ms-reveal' not in resp.text
+    assert 'input[type="password"]::-moz-reveal' not in resp.text
+    assert 'credentials-auto-fill-button' not in resp.text
 
 
 def test_inline_login_fallback_matches_modern_login_basics():
@@ -116,14 +116,14 @@ def test_inline_login_fallback_matches_modern_login_basics():
     assert 'Secured by' in LOGIN_FORM_HTML
     assert 'security-lock' in LOGIN_FORM_HTML
     assert 'Signing in' in LOGIN_FORM_HTML
-    assert 'appearance: none;' in LOGIN_FORM_HTML
-    assert '-webkit-appearance: none;' in LOGIN_FORM_HTML
-    assert '.password-field' in LOGIN_FORM_HTML
-    assert 'padding-right: 2.75rem;' in LOGIN_FORM_HTML
-    assert 'class="password-toggle"' in LOGIN_FORM_HTML
-    assert "password.type = visible ? 'text' : 'password';" in LOGIN_FORM_HTML
-    assert 'input[type="password"]::-ms-reveal' in LOGIN_FORM_HTML
-    assert 'input[type="password"]::-moz-reveal' in LOGIN_FORM_HTML
+    assert 'appearance: none;' not in LOGIN_FORM_HTML
+    assert '-webkit-appearance: none;' not in LOGIN_FORM_HTML
+    assert '.password-field' not in LOGIN_FORM_HTML
+    assert 'padding-right: 2.75rem;' not in LOGIN_FORM_HTML
+    assert 'class="password-toggle"' not in LOGIN_FORM_HTML
+    assert 'input[type="password"]::-ms-reveal' not in LOGIN_FORM_HTML
+    assert 'input[type="password"]::-moz-reveal' not in LOGIN_FORM_HTML
+    assert 'credentials-auto-fill-button' not in LOGIN_FORM_HTML
 
 
 def test_secure_transport_required_for_http_requests():
