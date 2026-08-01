@@ -101,9 +101,11 @@ def test_login_page_accepts_safe_error_param(client):
     assert 'Signing in' in resp.text
     assert 'appearance: none;' not in resp.text
     assert '-webkit-appearance: none;' not in resp.text
-    assert '.password-field' not in resp.text
-    assert 'padding-right: 2.75rem;' not in resp.text
-    assert 'class="password-toggle"' not in resp.text
+    assert '.password-field' in resp.text
+    assert 'padding-inline-end: 3rem;' in resp.text
+    assert 'class="password-toggle"' in resp.text
+    assert "password.type = showing ? 'text' : 'password';" in resp.text
+    assert 'password.focus();' in resp.text
     assert 'input[type="password"]::-ms-reveal' not in resp.text
     assert 'input[type="password"]::-moz-reveal' not in resp.text
     assert 'credentials-auto-fill-button' not in resp.text
@@ -118,9 +120,11 @@ def test_inline_login_fallback_matches_modern_login_basics():
     assert 'Signing in' in LOGIN_FORM_HTML
     assert 'appearance: none;' not in LOGIN_FORM_HTML
     assert '-webkit-appearance: none;' not in LOGIN_FORM_HTML
-    assert '.password-field' not in LOGIN_FORM_HTML
-    assert 'padding-right: 2.75rem;' not in LOGIN_FORM_HTML
-    assert 'class="password-toggle"' not in LOGIN_FORM_HTML
+    assert '.password-field' in LOGIN_FORM_HTML
+    assert 'padding-inline-end: 3rem;' in LOGIN_FORM_HTML
+    assert 'class="password-toggle"' in LOGIN_FORM_HTML
+    assert "password.type = showing ? 'text' : 'password';" in LOGIN_FORM_HTML
+    assert 'password.focus();' in LOGIN_FORM_HTML
     assert 'input[type="password"]::-ms-reveal' not in LOGIN_FORM_HTML
     assert 'input[type="password"]::-moz-reveal' not in LOGIN_FORM_HTML
     assert 'credentials-auto-fill-button' not in LOGIN_FORM_HTML
