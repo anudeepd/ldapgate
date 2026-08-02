@@ -57,7 +57,7 @@ class _RevocationStore:
     def _prune(self, now: float) -> None:
         self._revoked = {token: expiry for token, expiry in self._revoked.items() if expiry > now}
 
-    def _locked_load_and_save(self, extra: dict[str, float]) -> None:
+    def _locked_load_and_save(self, extra: dict[str, float], remove: set[str] | None = None) -> None:
         """Atomically load, merge, prune, and save the shared file under lock.
 
         Uses ``time.time()`` for expiry comparisons so that multiple
@@ -99,6 +99,9 @@ class _RevocationStore:
             if not isinstance(data, dict):
                 data = {}
 
+            for key in remove or set():
+                data.pop(key, None)
+                self._revoked.pop(key, None)
             data.update(extra)
             data = {k: v for k, v in data.items() if isinstance(v, (int, float)) and v > now}
             self._revoked.update(data)
@@ -118,6 +121,28 @@ class _RevocationStore:
         self._prune(now)
         self._revoked[token] = now + self._ttl
         self._locked_load_and_save({token: now + self._ttl})
+
+    def add_user(self, username: str) -> None:
+        """Revoke all current and future cookies for a user until TTL expiry."""
+        key = f'user:{username.casefold()}'
+        now = time.time()
+        self._prune(now)
+        self._revoked[key] = now + self._ttl
+        self._locked_load_and_save({key: now + self._ttl})
+
+    def remove_user(self, username: str) -> None:
+        """Allow new cookies for a user after an operator re-enables them."""
+        key = f'user:{username.casefold()}'
+        self._revoked.pop(key, None)
+        self._locked_load_and_save({}, {key})
+
+    def contains_user(self, username: str) -> bool:
+        key = f'user:{username.casefold()}'
+        now = time.time()
+        self._prune(now)
+        if self._path:
+            self._locked_load_and_save({})
+        return key in self._revoked
 
     def contains(self, token: str) -> bool:
         now = time.time()
@@ -301,6 +326,8 @@ class SessionManager:
             expected_hash = payload.get('c')
             if not username:
                 return None
+            if self._revocation.contains_user(username):
+                return None
             # If session was created with client binding, verify it
             if expected_hash:
                 current_hash = self._client_hash(client_ip, user_agent)
@@ -340,6 +367,32 @@ class SessionManager:
         self._revocation.add(cookie_value)
         if username:
             self._untrack_session(cookie_value, username)
+
+    def revoke_user_sessions(self, username: str) -> int:
+        """Revoke tracked and future cookies for *username* until TTL expiry.
+
+        Returns the number of tracked cookies revoked. The user marker and
+        cookie entries remain authoritative across worker processes when
+        configured.
+        """
+        target = username.casefold()
+        cookies: list[tuple[str, str]] = []
+        with self._sessions_lock:
+            for cid, (cookie, tracked_username, _last_seen) in list(self._session_activity.items()):
+                if tracked_username.casefold() == target:
+                    cookies.append((cid, cookie))
+                    del self._session_activity[cid]
+            for user in list(self._user_sessions):
+                if user.casefold() == target:
+                    del self._user_sessions[user]
+        self._revocation.add_user(username)
+        for _cid, cookie in cookies:
+            self._revocation.add(cookie)
+        return len(cookies)
+
+    def restore_user_sessions(self, username: str) -> None:
+        """Clear user-wide revocation marker while keeping old cookies revoked."""
+        self._revocation.remove_user(username)
 
     def generate_csrf_token(self, client_ip: str = '') -> str:
         """Generate a signed CSRF token bound to the client IP."""

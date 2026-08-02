@@ -132,6 +132,19 @@ def test_session_revocation():
     assert manager.verify_session(cookie, client_ip='10.0.0.1', user_agent='Mozilla/5.0') is None
 
 
+def test_revoke_user_sessions_revokes_all_matching_cookies():
+    manager = SessionManager(_TEST_SECRET, session_ttl=3600)
+    alice_one = manager.create_session('Alice')
+    alice_two = manager.create_session('alice')
+    bob = manager.create_session('bob')
+
+    assert manager.revoke_user_sessions('ALICE') == 2
+    assert manager.verify_session(manager.create_session('alice')) is None
+    assert manager.verify_session(alice_one) is None
+    assert manager.verify_session(alice_two) is None
+    assert manager.verify_session(bob) == 'bob'
+
+
 def test_revocation_file_with_insecure_permissions_does_not_crash(tmp_path):
     """Unsafe revocation store permissions should disable file use without raising."""
     revocation_path = tmp_path / 'revoked.json'
