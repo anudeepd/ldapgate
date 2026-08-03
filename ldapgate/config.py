@@ -46,7 +46,7 @@ class LDAPSettings(BaseModel):
         True,
         description='Require allowed_users or group_dn to be configured. Disable only for local development or tests.',
     )
-    timeout: int = Field(10, description='LDAP connection timeout in seconds')
+    timeout: int = Field(10, ge=1, description='LDAP operation and total authentication timeout in seconds')
     block_plaintext_ldap: bool = Field(
         True,
         description='Refuse to start if using plain ldap:// without STARTTLS. Set to False only for testing.',

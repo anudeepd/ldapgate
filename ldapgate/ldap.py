@@ -99,82 +99,88 @@ def _build_tls(config: LDAPSettings) -> Tls | None:
 
 
 class _LDAPConnectionPool:
-    """Per-thread connection pool for the service account.
-
-    Each OS thread gets its own LDAP connection, so concurrent
-    ``asyncio.to_thread`` workers never block on each other.
-    Connections are lazily created and kept alive via keepalive checks.
-
-    Uses a semaphore (pool_size) to limit the total number of concurrent
-    connections across all threads, preventing LDAP server overload.
-    """
+    """Bounded pool of reusable service-account LDAP connections."""
 
     def __init__(self, config: LDAPSettings):
         self.config = config
         self.tls = _build_tls(config)
         self.server = Server(config.url, connect_timeout=config.timeout, get_info=NONE, tls=self.tls)
-        self._local = threading.local()
+        self._idle: list[tuple[Connection, float]] = []
+        self._idle_lock = threading.Lock()
         self._semaphore = threading.BoundedSemaphore(config.pool_size)
 
-    def _acquire(self) -> None:
-        """Acquire a pool slot, blocking if at capacity."""
-        self._semaphore.acquire()
-
-    def _release(self) -> None:
-        """Release a pool slot."""
-        with contextlib.suppress(ValueError):
-            self._semaphore.release()
+    def _open_connection(self) -> Connection:
+        _auto_ref = self.config.follow_referrals and not self.config.referral_allowed_hosts
+        conn = Connection(
+            self.server,
+            user=self.config.bind_dn,
+            password=self.config.bind_password.get_secret_value(),
+            raise_exceptions=True,
+            auto_referrals=_auto_ref,
+            receive_timeout=self.config.timeout,
+        )
+        conn.open()
+        if self.config.use_starttls:
+            conn.start_tls()
+        conn.bind()
+        return conn
 
     def _get_conn(self) -> Connection:
-        now = time.monotonic()
-        conn: Connection | None = getattr(self._local, 'conn', None)
-        last_used: float = getattr(self._local, 'last_used', 0.0)
+        if not self._semaphore.acquire(timeout=self.config.timeout):
+            raise TimeoutError('Timed out waiting for an LDAP connection')
 
-        if conn is not None:
-            # Proactive keepalive: if the connection has been idle too
-            # long, refresh it to avoid stale-connection errors.
-            if now - last_used > _POOL_KEEPALIVE_INTERVAL:
+        try:
+            with self._idle_lock:
+                pooled = self._idle.pop() if self._idle else None
+            conn, last_used = pooled if pooled is not None else (None, 0.0)
+
+            if conn is not None and time.monotonic() - last_used > _POOL_KEEPALIVE_INTERVAL:
                 with contextlib.suppress(LDAPException):
                     conn.unbind()
                 conn = None
-                self._release()
-            elif not conn.bound:
+            elif conn is not None and not conn.bound:
                 try:
                     conn.bind()
                 except LDAPException:
+                    with contextlib.suppress(LDAPException):
+                        conn.unbind()
                     conn = None
-                    self._release()
 
-        if conn is None:
-            self._acquire()
-            try:
-                _auto_ref = self.config.follow_referrals and not self.config.referral_allowed_hosts
-                conn = Connection(
-                    self.server,
-                    user=self.config.bind_dn,
-                    password=self.config.bind_password.get_secret_value(),
-                    raise_exceptions=True,
-                    auto_referrals=_auto_ref,
-                )
-                conn.open()
-                if self.config.use_starttls:
-                    conn.start_tls()
-                conn.bind()
-            except LDAPException:
-                self._release()
-                raise
+            return conn if conn is not None else self._open_connection()
+        except Exception:
+            self._semaphore.release()
+            raise
 
-        self._local.conn = conn
-        self._local.last_used = now
-        return conn
+    def _return_conn(self, conn: Connection, *, reusable: bool) -> None:
+        try:
+            if reusable and conn.bound:
+                with self._idle_lock:
+                    self._idle.append((conn, time.monotonic()))
+            else:
+                with contextlib.suppress(LDAPException):
+                    conn.unbind()
+        finally:
+            self._semaphore.release()
+
+    @contextlib.contextmanager
+    def connection(self):
+        conn = self._get_conn()
+        reusable = True
+        try:
+            yield conn
+        except LDAPException:
+            reusable = False
+            raise
+        finally:
+            self._return_conn(conn, reusable=reusable)
 
     def release(self) -> None:
-        conn: Connection | None = getattr(self._local, 'conn', None)
-        if conn:
+        with self._idle_lock:
+            idle = self._idle
+            self._idle = []
+        for conn, _last_used in idle:
             with contextlib.suppress(LDAPException):
                 conn.unbind()
-            self._local.conn = None
-        self._release()
 
 
 class LDAPAuthenticator:
@@ -247,6 +253,7 @@ class LDAPAuthenticator:
             password=password,
             raise_exceptions=True,
             auto_referrals=_auto_ref,
+            receive_timeout=self.config.timeout,
         )
         conn.open()
         if self.config.use_starttls:
@@ -301,6 +308,7 @@ class LDAPAuthenticator:
                     password=self.config.bind_password.get_secret_value(),
                     raise_exceptions=True,
                     auto_referrals=False,
+                    receive_timeout=self.config.timeout,
                 )
                 ref_conn.open()
                 if self.config.use_starttls:
@@ -322,22 +330,15 @@ class LDAPAuthenticator:
                 continue
 
     async def authenticate(self, username: str, password: str) -> bool:
-        """Authenticate user against LDAP directory.
-
-        Process:
-        1. Check local allowlist first (if configured)
-        2. Bind as service account and search for user DN
-        3. Re-bind with user DN + supplied password
-        4. Optionally check group membership
-
-        Args:
-            username: Username to authenticate
-            password: Password to verify
-
-        Returns:
-            True if authentication successful, False otherwise
-        """
-        return await asyncio.to_thread(self._authenticate_sync, username, password)
+        """Authenticate a user within the configured LDAP deadline."""
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._authenticate_sync, username, password),
+                timeout=self.config.timeout,
+            )
+        except TimeoutError:
+            log.warning('LDAP authentication timed out')
+            return False
 
     _MIN_AUTH_TIME = 0.5  # minimum seconds for auth path to prevent timing leaks
 
@@ -367,47 +368,38 @@ class LDAPAuthenticator:
         user_dn = None
 
         try:
-            # Step 2: Bind as service account and search for user DN.
-            conn = self._pool._get_conn()
-
-            # Escape special LDAP characters to prevent injection
-            safe_username = _escape_ldap(username)
-            user_filter = _build_user_filter(self.config.user_filter, safe_username)
-            conn.search(
-                search_base=self.config.base_dn,
-                search_filter=user_filter,
-                search_scope=SUBTREE,
-            )
-
-            if self.config.follow_referrals and self.config.referral_allowed_hosts:
-                self._follow_search_referrals(conn, self.config.base_dn, user_filter, SUBTREE)
-
-            if not conn.entries:
-                # Timing-attack mitigation: ensure a minimum wall-clock time
-                # so that "user not found" takes roughly as long as a failed
-                # bind attempt, preventing user enumeration via timing.
-                _elapsed = time.time() - _start
-                _remaining = max(0.0, self._MIN_AUTH_TIME - _elapsed)
-                time.sleep(_remaining)
-            elif len(conn.entries) != 1:
-                log.warning(
-                    'LDAP user_filter returned %d entries; refusing ambiguous login',
-                    len(conn.entries),
+            # Step 2: Lease a service-account connection and search for the user DN.
+            with self._pool.connection() as conn:
+                safe_username = _escape_ldap(username)
+                user_filter = _build_user_filter(self.config.user_filter, safe_username)
+                conn.search(
+                    search_base=self.config.base_dn,
+                    search_filter=user_filter,
+                    search_scope=SUBTREE,
                 )
+
+                if self.config.follow_referrals and self.config.referral_allowed_hosts:
+                    self._follow_search_referrals(conn, self.config.base_dn, user_filter, SUBTREE)
+
+                entry_count = len(conn.entries)
+                if entry_count == 1:
+                    user_dn = conn.entries[0].entry_dn
+
+            if user_dn is None:
+                if entry_count != 0:
+                    log.warning(
+                        'LDAP user_filter returned %d entries; refusing ambiguous login',
+                        entry_count,
+                    )
                 _elapsed = time.time() - _start
                 _remaining = max(0.0, self._MIN_AUTH_TIME - _elapsed)
                 time.sleep(_remaining)
             else:
-                user_dn = conn.entries[0].entry_dn
-
                 # Step 3: Try to bind as the user with supplied password.
-                conn = self._connect(user_dn, password)
-                conn.unbind()
+                user_conn = self._connect(user_dn, password)
+                user_conn.unbind()
                 auth_ok = True
 
-                # Top up to constant time so success path also takes
-                # at least _MIN_AUTH_TIME (failures finish here via sleep
-                # above; ok path adds bind latency, top up any remainder).
                 _elapsed = time.time() - _start
                 _remaining = max(0.0, self._MIN_AUTH_TIME - _elapsed)
                 time.sleep(_remaining)
@@ -449,34 +441,32 @@ class LDAPAuthenticator:
         """
         assert self.config.group_dn is not None
         try:
-            conn = self._pool._get_conn()
-            # Search for the group entry and retrieve its member attributes
-            conn.search(
-                search_base=self.config.group_dn,
-                search_filter='(objectClass=groupOfNames)',
-                search_scope=BASE,
-                attributes=['member', 'uniqueMember', 'memberOf'],
-            )
-            if self.config.follow_referrals and self.config.referral_allowed_hosts:
-                self._follow_search_referrals(
-                    conn,
-                    self.config.group_dn,
-                    '(objectClass=groupOfNames)',
-                    BASE,
-                    attributes=['member', 'uniqueMember', 'memberOf'],
-                )
-            if not conn.entries:
-                # Fallback: try a broader search for Active Directory groups
+            with self._pool.connection() as conn:
                 conn.search(
                     search_base=self.config.group_dn,
-                    search_filter='(objectClass=*)',
+                    search_filter='(objectClass=groupOfNames)',
                     search_scope=BASE,
                     attributes=['member', 'uniqueMember', 'memberOf'],
                 )
+                if self.config.follow_referrals and self.config.referral_allowed_hosts:
+                    self._follow_search_referrals(
+                        conn,
+                        self.config.group_dn,
+                        '(objectClass=groupOfNames)',
+                        BASE,
+                        attributes=['member', 'uniqueMember', 'memberOf'],
+                    )
                 if not conn.entries:
-                    return False
-
-            group = conn.entries[0]
+                    # Fallback: try a broader search for Active Directory groups
+                    conn.search(
+                        search_base=self.config.group_dn,
+                        search_filter='(objectClass=*)',
+                        search_scope=BASE,
+                        attributes=['member', 'uniqueMember', 'memberOf'],
+                    )
+                    if not conn.entries:
+                        return False
+                group = conn.entries[0]
             members = set()
             for attr in ('member', 'uniqueMember'):
                 if attr in group:

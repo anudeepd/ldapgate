@@ -51,7 +51,7 @@ ldap:
   #   - alice
   #   - bob
 
-  timeout: 10
+  timeout: 10  # LDAP operation and total login deadline in seconds.
 
   # Refuse to start if using ldap:// without STARTTLS.
   block_plaintext_ldap: true

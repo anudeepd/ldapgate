@@ -39,7 +39,7 @@ ldap:
   allowed_users:                                      # or restrict by local allowlist
     - alice
     - bob
-  timeout: 10
+  timeout: 10                                      # LDAP operation and total login deadline
   tls_validate: REQUIRED                             # NONE | OPTIONAL | REQUIRED
   tls_ca_cert_file: /etc/ssl/certs/internal-ca.pem  # optional — custom CA bundle
   tls_client_cert_file: /etc/ssl/certs/client.pem   # optional — mutual TLS client cert
