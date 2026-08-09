@@ -112,6 +112,7 @@ LOGIN_FORM_HTML = """
         .password-field { position: relative; }
         .password-field input { padding-inline-end: 3rem; }
         .password-toggle { position: absolute; inset-inline-end: 0.5rem; top: 50%; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #64748b; cursor: pointer; transform: translateY(-50%); }
+        input[type="password"]::-ms-reveal { display: none; }
         .password-toggle[hidden] { display: none; }
         .password-toggle:hover { background: #334155; color: #f1f5f9; }
         .password-toggle:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
