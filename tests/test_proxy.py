@@ -589,3 +589,65 @@ def test_safe_host_validation():
     assert _is_safe_host('evil.com@real.com') is False
     assert _is_safe_host('evil.com/') is False
     assert _is_safe_host('a' * 300) is False
+
+
+def _age_csrf_token(token: str, seconds: float) -> str:
+    """Rewrite a CSRF token's embedded timestamp to age it by *seconds*."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+
+    payload_b64, _sig = token.split('.', 1)
+    pad = '=' * (-len(payload_b64) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_b64 + pad))
+    payload['t'] -= seconds
+    aged_b64 = base64.urlsafe_b64encode(json.dumps(payload, separators=(',', ':')).encode()).rstrip(b'=').decode()
+    key = b'ldapgate-csrf:' + b'a4f8c2e1b7d9e3f6a1b4c7d0e3f6a9b2c5d8e1f4a7b0c3d6e9f2a5b8c1d4e7'
+    aged_sig = hmac.new(key, aged_b64.encode(), hashlib.sha256).hexdigest()
+    return f'{aged_b64}.{aged_sig}'
+
+
+def test_login_post_with_overnight_token_succeeds():
+    """Regression: login page left open past session_ttl must still submit.
+
+    The CSRF token is fetched from the login page, aged past session_ttl
+    (but within csrf_ttl), and submitted — must NOT be rejected as an
+    invalid form submission.
+    """
+    import re
+
+    config = _test_config()
+    router = create_login_router(config)
+    app = FastAPI()
+    app.include_router(router)
+
+    with (
+        make_test_client(app, follow_redirects=False) as tc,
+        patch('ldapgate.proxy.LDAPAuthenticator.authenticate', return_value=True),
+    ):
+        resp = tc.get('/_auth/login')
+        assert resp.status_code == 200
+        match = re.search(r'name="csrf_token" value="([^"]+)"', resp.text)
+        assert match, 'csrf token not found in login page'
+        csrf = match.group(1)
+
+        # Simulate tab open overnight: token older than session_ttl (3600)
+        # but within default csrf_ttl (24h).
+        aged = _age_csrf_token(csrf, seconds=7200)
+
+        resp = tc.post(
+            '/_auth/login',
+            data={
+                'username': 'alice',
+                'password': 'secret',
+                'csrf_token': aged,
+                'redirect': '/',
+            },
+            headers={
+                'Origin': 'http://testserver',
+                'Referer': 'http://testserver/_auth/login',
+                'Host': 'testserver',
+            },
+        )
+        assert resp.status_code == 302, f'expected redirect, got {resp.status_code}: {resp.text[:200]}'

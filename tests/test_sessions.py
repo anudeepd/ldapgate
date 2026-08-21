@@ -1,5 +1,9 @@
 """Tests for session management."""
 
+import base64
+import hashlib
+import hmac
+import json
 import time
 
 from ldapgate.sessions import SessionManager
@@ -200,6 +204,37 @@ def test_csrf_token_ip_binding():
     token = manager.generate_csrf_token(client_ip='10.0.0.1')
     assert manager.validate_csrf_token(token, client_ip='10.0.0.1')
     assert not manager.validate_csrf_token(token, client_ip='10.0.0.2')
+
+
+def test_csrf_token_outlives_session_ttl():
+    """A login page left open past session_ttl must still submit successfully."""
+    manager = SessionManager(_TEST_SECRET, session_ttl=3600, csrf_ttl=24 * 3600)
+
+    token = manager.generate_csrf_token(client_ip='10.0.0.1')
+    # Age the token past session_ttl but keep it within csrf_ttl.
+    payload_b64, _sig = token.split('.', 1)
+    pad = '=' * (-len(payload_b64) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_b64 + pad))
+    payload['t'] = time.time() - 7200
+    aged_b64 = base64.urlsafe_b64encode(json.dumps(payload, separators=(',', ':')).encode()).rstrip(b'=').decode()
+    aged_token = f'{aged_b64}.{hmac.new(b"ldapgate-csrf:" + _TEST_SECRET.encode(), aged_b64.encode(), hashlib.sha256).hexdigest()}'
+
+    assert manager.validate_csrf_token(aged_token, client_ip='10.0.0.1')
+
+
+def test_csrf_token_rejected_after_csrf_ttl():
+    """A token older than csrf_ttl must be rejected."""
+    manager = SessionManager(_TEST_SECRET, session_ttl=3600, csrf_ttl=3600)
+
+    token = manager.generate_csrf_token(client_ip='10.0.0.1')
+    payload_b64, _sig = token.split('.', 1)
+    pad = '=' * (-len(payload_b64) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_b64 + pad))
+    payload['t'] = time.time() - 7200
+    aged_b64 = base64.urlsafe_b64encode(json.dumps(payload, separators=(',', ':')).encode()).rstrip(b'=').decode()
+    aged_token = f'{aged_b64}.{hmac.new(b"ldapgate-csrf:" + _TEST_SECRET.encode(), aged_b64.encode(), hashlib.sha256).hexdigest()}'
+
+    assert not manager.validate_csrf_token(aged_token, client_ip='10.0.0.1')
 
 
 def test_client_binding_can_be_disabled_for_unstable_addresses():

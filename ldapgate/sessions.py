@@ -161,6 +161,7 @@ class SessionManager:
         self,
         secret_key: str,
         session_ttl: int = 3600,
+        csrf_ttl: int = 24 * 3600,
         revocation_path: str | None = None,
         max_sessions_per_user: int = 0,
         bind_client: bool = True,
@@ -189,6 +190,7 @@ class SessionManager:
         self.serializer = TimedSigner(secret_key)
         self._csrf_serializer = TimedSigner(secret_key, salt='ldapgate-csrf')
         self.session_ttl = session_ttl
+        self.csrf_ttl = csrf_ttl
         self._revocation = _RevocationStore(
             path=Path(revocation_path) if revocation_path else None,
             ttl=session_ttl,
@@ -416,7 +418,7 @@ class SessionManager:
         if not token:
             return False
         try:
-            data = self._csrf_serializer.loads(token, max_age=self.session_ttl)
+            data = self._csrf_serializer.loads(token, max_age=self.csrf_ttl)
             if not isinstance(data, dict):
                 return False
             stored_fp = data.get('f', '')
@@ -433,7 +435,7 @@ class SessionManager:
             with self._csrf_lock:
                 if token_key in self._csrf_used:
                     return False
-                self._csrf_used[token_key] = now + self.session_ttl
+                self._csrf_used[token_key] = now + self.csrf_ttl
             return True
         except BadSignature:
             return False

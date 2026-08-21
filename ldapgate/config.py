@@ -142,6 +142,13 @@ class ProxySettings(BaseModel):
     )
     secret_key: SecretStr = Field(..., description='Secret key for signing session cookies')
     session_ttl: int = Field(3600, description='Session time-to-live in seconds')
+    csrf_ttl: int = Field(
+        24 * 3600,
+        description=(
+            'Login CSRF token time-to-live in seconds. Tokens live longer than '
+            'sessions so a login page left open overnight still submits successfully.'
+        ),
+    )
     idle_timeout: int = Field(
         0,
         ge=0,

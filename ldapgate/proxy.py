@@ -474,6 +474,7 @@ class ProxyApp:
             max_sessions_per_user=config.proxy.max_sessions_per_user,
             bind_client=config.proxy.bind_client,
             idle_timeout=config.proxy.idle_timeout,
+            csrf_ttl=config.proxy.csrf_ttl,
         )
         self._basic_auth_limiter = BasicAuthRateLimiter(
             max_failures=config.proxy.rate_limit_max_failures,
@@ -1097,6 +1098,7 @@ def create_login_router(
         max_sessions_per_user=config.proxy.max_sessions_per_user,
         bind_client=config.proxy.bind_client,
         idle_timeout=config.proxy.idle_timeout,
+        csrf_ttl=config.proxy.csrf_ttl,
     )
 
     # Resolve template: custom path → bundled ldapgate template → inline fallback
