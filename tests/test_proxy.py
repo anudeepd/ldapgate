@@ -92,9 +92,11 @@ def test_login_page_accepts_safe_error_param(client):
     resp = client.get('/_auth/login?error=invalid')
     assert resp.status_code == 200
     assert 'Invalid username or password' in resp.text
-    assert 'class="feedback-slot" aria-live="polite"' in resp.text
-    assert 'ldapgate-card-in' in resp.text
-    assert 'ldapgate-alert-in' in resp.text
+    assert 'class="feedback-slot"' in resp.text
+    assert 'id="login-error" role="alert"' in resp.text
+    assert 'class="error"' in resp.text
+    assert 'animation: login-card-in 340ms' in resp.text
+    assert 'animation: login-error-up 180ms' in resp.text
     assert 'ldapgate:login:username' in resp.text
     assert 'Secured by' in resp.text
     assert 'security-lock' in resp.text
@@ -112,8 +114,8 @@ def test_login_page_accepts_safe_error_param(client):
 
 
 def test_inline_login_fallback_matches_modern_login_basics():
-    assert 'ldapgate-card-in' in LOGIN_FORM_HTML
-    assert 'ldapgate-alert-in' in LOGIN_FORM_HTML
+    assert 'animation: login-card-in 340ms' in LOGIN_FORM_HTML
+    assert 'animation: login-error-up 180ms' in LOGIN_FORM_HTML
     assert 'ldapgate:login:username' in LOGIN_FORM_HTML
     assert 'Secured by' in LOGIN_FORM_HTML
     assert 'security-lock' in LOGIN_FORM_HTML

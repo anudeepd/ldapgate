@@ -95,62 +95,78 @@ LOGIN_FORM_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign in{% if app_name %} — {{ app_name }}{% endif %}</title>
     <style nonce="{{ csrf_nonce }}">
+        :root {
+            --bg: #020617; --card: #0f172a; --card-border: #1e293b;
+            --field: #1e293b; --field-border: #334155; --label: #94a3b8;
+            --text: #e2e8f0; --text-strong: #f8fafc; --faint: #86909d;
+            --accent: #2563eb; --accent-hover: #2e69ec; --accent-border: #3b82f6;
+            --accent-soft: #bfdbfe; --focus: #3b82f6; --focus-glow: rgb(59 130 246 / .20);
+            --error-bg: #1c0505; --error-border: #7f1d1d; --error-text: #fca5a5;
+        }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #020617; color: #f1f5f9; min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; -webkit-font-smoothing: antialiased; }
+        body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; -webkit-font-smoothing: antialiased; }
         .login-shell { position: relative; width: 100%; max-width: 400px; }
-        .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; box-shadow: 0 25px 50px -12px rgb(0 0 0 / .6); padding: 2.5rem 2rem; width: 100%; max-width: 400px; animation: ldapgate-card-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-        .header { text-align: center; margin-bottom: 2rem; }
-        .app-name { font-size: 1.25rem; font-weight: 600; color: #f1f5f9; letter-spacing: -0.025em; }
-        .subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.3rem; }
-        .feedback-slot { position: absolute; inset-inline: 0; bottom: calc(100% + 0.75rem); pointer-events: none; }
-        .error { background: #1c0505; border: 1px solid #7f1d1d; color: #fca5a5; border-radius: 8px; padding: 0.7rem 0.875rem; font-size: 0.8125rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 14px 30px -18px rgb(0 0 0 / .85); animation: ldapgate-alert-in 260ms cubic-bezier(0.16, 1, 0.3, 1) 70ms both; }
+        .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; box-shadow: 0 25px 50px -12px rgb(0 0 0 / .6); padding: 2.5rem 2rem; width: 100%; max-width: 400px; animation: login-card-in 340ms cubic-bezier(.16, 1, .3, 1) both; }
+        .logo-wrap { display: flex; align-items: center; justify-content: center; gap: 0.625rem; margin-bottom: 2rem; }
+        .logo-text { font-size: 1.25rem; font-weight: 600; color: var(--text-strong); letter-spacing: 0; }
+        .feedback-slot { position: absolute; inset-inline: 0; top: -3.6rem; min-height: 2.8rem; pointer-events: none; }
+        .error { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); border-radius: 8px; padding: 0.7rem 0.875rem; font-size: 0.8125rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 14px 30px -18px rgb(0 0 0 / .85); animation: login-error-up 180ms cubic-bezier(.16, 1, .3, 1) 0.08s both; }
         .error-icon { flex-shrink: 0; }
         .field { margin-bottom: 1.125rem; }
-        label { display: block; font-size: 0.6875rem; font-weight: 500; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
-        input[type="text"], input[type="password"] { width: 100%; background: #1e293b; border: 1px solid #334155; color: #f1f5f9; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 0.875rem; line-height: 1.25rem; min-height: 40px; padding: 0.625rem 0.75rem; border-radius: 8px; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
-        input[type="text"]:focus, input[type="password"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgb(59 130 246 / .18); }
+        label { display: block; font-size: 0.6875rem; font-weight: 500; color: var(--label); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
+        input[type="text"], input[type="password"] { width: 100%; background: var(--field); border: 1px solid var(--field-border); color: var(--text); font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 0.875rem; line-height: 1.25rem; min-height: 40px; padding: 0.625rem 0.75rem; border-radius: 8px; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+        input[type="text"]::placeholder, input[type="password"]::placeholder { color: var(--faint); }
+        input[type="text"]:focus, input[type="password"]:focus { border-color: var(--focus); box-shadow: 0 0 0 3px var(--focus-glow); }
         .password-field { position: relative; }
         .password-field input { padding-inline-end: 3rem; }
-        .password-toggle { position: absolute; inset-inline-end: 0.5rem; top: 50%; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #64748b; cursor: pointer; transform: translateY(-50%); }
+        .password-toggle { position: absolute; inset-inline-end: 0.5rem; top: 50%; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: pointer; transform: translateY(-50%); }
         input[type="password"]::-ms-reveal { display: none; }
         .password-toggle[hidden] { display: none; }
-        .password-toggle:hover { background: #334155; color: #f1f5f9; }
-        .password-toggle:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+        .password-toggle:hover { background: var(--card-border); color: var(--text); }
+        .password-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
         .password-toggle svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
         .password-toggle .eye-closed, .password-toggle[aria-pressed="true"] .eye-open { display: none; }
         .password-toggle[aria-pressed="true"] .eye-closed { display: block; }
         .submit-wrap { margin-top: 1.5rem; }
-        button[type="submit"] { width: 100%; background: #2563eb; color: #ffffff; font-family: inherit; font-size: 0.875rem; font-weight: 600; line-height: 1.25rem; min-height: 40px; padding: 0.65rem 1rem; border: none; border-radius: 8px; cursor: pointer; transition: background 0.15s, transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
-        button[type="submit"]:hover:not(:disabled) { background: #3b82f6; }
+        button[type="submit"] { width: 100%; background: var(--accent); border: 1px solid var(--accent-border); color: #ffffff; font-family: inherit; font-size: 0.875rem; font-weight: 600; line-height: 1.25rem; min-height: 40px; padding: 0.65rem 1rem; border-radius: 8px; cursor: pointer; transition: background 0.15s, transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        button[type="submit"]:hover:not(:disabled) { background: var(--accent-hover); }
         button[type="submit"]:active:not(:disabled) { transform: scale(0.99); }
+        button[type="submit"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
         button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
         .spinner { display: none; width: 15px; height: 15px; border: 2px solid rgb(255 255 255 / .25); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
         button[type="submit"].loading .spinner { display: block; }
         .submit-label { min-width: 4.75rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes ldapgate-card-in { 0% { opacity: 0; transform: translateY(-12px) scale(.94); filter: blur(2px); } 60% { opacity: 1; transform: translateY(1px) scale(1.01); filter: blur(0); } 100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
-        @keyframes ldapgate-alert-in { from { opacity: 0; transform: translateY(10px) scale(.985); } 70% { opacity: 1; transform: translateY(-1px) scale(1); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .powered-by { margin-top: 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0.375rem; font-size: 0.72rem; line-height: 1; color: #94a3b8; }
+        @keyframes login-card-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes login-error-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .powered-by { margin-top: 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0.375rem; font-size: 0.72rem; line-height: 1; color: var(--faint); }
         .security-lock { width: 14px; height: 14px; flex-shrink: 0; color: currentColor; }
         .powered-by span { white-space: nowrap; }
-        .powered-by a { color: #cbd5e1; text-decoration: none; }
-        .powered-by a:hover { color: #f1f5f9; }
+        .powered-by a { color: var(--label); text-decoration: none; }
+        .powered-by a:hover { color: var(--accent-soft); }
         @media (prefers-reduced-motion: reduce) { .card, .error, .spinner { animation: none; } button[type="submit"] { transition: none; } }
     </style>
 </head>
 <body>
     <div class="login-shell">
-        {% if error %}<div class="feedback-slot" aria-live="polite"><div class="error" id="login-error"><svg class="error-icon" width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M7.5 1a6.5 6.5 0 1 0 0 13A6.5 6.5 0 0 0 7.5 1ZM7 4.5a.5.5 0 0 1 1 0v4a.5.5 0 0 1-1 0v-4Zm.5 6.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" fill="currentColor"/></svg>{{ error }}</div></div>{% endif %}
+        <div class="feedback-slot" aria-live="off">
+            {% if error %}
+            <div class="error" id="login-error" role="alert">
+                <svg class="error-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M7.5 1a6.5 6.5 0 1 0 0 13A6.5 6.5 0 0 0 7.5 1ZM7 4.5a.5.5 0 0 1 1 0v4a.5.5 0 0 1-1 0v-4Zm.5 6.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" fill="currentColor"/></svg>
+                <span>{{ error }}</span>
+            </div>
+            {% endif %}
+        </div>
         <div class="card">
-            <div class="header"><div class="app-name">{{ app_name or "LDAPGate" }}</div><div class="subtitle">Enter your credentials to continue</div></div>
+            <div class="logo-wrap"><span class="logo-text">{{ app_name or "LDAPGate" }}</span></div>
             <form method="POST" action="{{ login_path }}" id="login-form">
                 {% if redirect %}<input type="hidden" name="redirect" value="{{ redirect }}">{% endif %}
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <div class="field"><label for="username">Username</label><input type="text" id="username" name="username" autocomplete="username" autofocus required></div>
-                <div class="field"><label for="password">Password</label><div class="password-field"><input type="password" id="password" name="password" autocomplete="current-password" required><button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" aria-controls="password" aria-pressed="false" hidden><svg class="eye-open" aria-hidden="true" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-closed" aria-hidden="true" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.58 10.58a2 2 0 0 0 2.83 2.83"/><path d="M9.36 5.36A10.7 10.7 0 0 1 12 5c5 0 8.73 4.11 9.94 6.36a1 1 0 0 1 0 .28 15.8 15.8 0 0 1-2.44 3.42M6.61 6.61C4.47 8.03 2.99 10.2 2.06 11.65a1 1 0 0 0 0 .7C3.27 14.9 7 19 12 19c1.42 0 2.74-.32 3.91-.86"/></svg></button></div></div>
+                <div class="field"><label for="username">Username</label><input type="text" id="username" name="username" autocomplete="username"{% if error %} aria-describedby="login-error"{% endif %} autofocus required></div>
+                <div class="field"><label for="password">Password</label><div class="password-field"><input type="password" id="password" name="password" autocomplete="current-password"{% if error %} aria-describedby="login-error"{% endif %} required><button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" aria-controls="password" aria-pressed="false" hidden><svg class="eye-open" aria-hidden="true" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-closed" aria-hidden="true" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.58 10.58a2 2 0 0 0 2.83 2.83"/><path d="M9.36 5.36A10.7 10.7 0 0 1 12 5c5 0 8.73 4.11 9.94 6.36a1 1 0 0 1 0 .28 15.8 15.8 0 0 1-2.44 3.42M6.61 6.61C4.47 8.03 2.99 10.2 2.06 11.65a1 1 0 0 0 0 .7C3.27 14.9 7 19 12 19c1.42 0 2.74-.32 3.91-.86"/></svg></button></div></div>
                 <div class="submit-wrap"><button type="submit" id="submit-btn"><span class="spinner" aria-hidden="true"></span><span class="submit-label" aria-live="polite">Sign in</span></button></div>
             </form>
-            <div class="powered-by"><svg class="security-lock" aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="11" height="8" rx="2"/><path d="M7 8V5.75a3 3 0 0 1 6 0V8"/></svg><span>Secured by <a href="https://github.com/anudeepd/ldapgate">LDAPGate</a></span></div>
+            <div class="powered-by"><svg class="security-lock" aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="12" height="9" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg><span>Secured by <a href="https://github.com/anudeepd/ldapgate" target="_blank" rel="noopener noreferrer">LDAPGate</a></span></div>
         </div>
     </div>
     <script nonce="{{ csrf_nonce }}">
@@ -158,8 +174,8 @@ LOGIN_FORM_HTML = """
         const username = document.getElementById('username');
         const password = document.getElementById('password');
         const passwordToggle = document.getElementById('password-toggle');
-        const usernameStorageKey = 'ldapgate:login:username';
-        const savedUsername = sessionStorage.getItem(usernameStorageKey);
+        const storageKey = 'ldapgate:login:username';
+        const hasError = {{ 'true' if error else 'false' }};
         let loginSubmitting = false;
         if (password && passwordToggle) {
             passwordToggle.hidden = false;
@@ -171,18 +187,19 @@ LOGIN_FORM_HTML = """
                 password.focus();
             });
         }
-        if (document.getElementById('login-error') && savedUsername) { username.value = savedUsername; }
-
-        username.addEventListener('input', function() { sessionStorage.setItem(usernameStorageKey, username.value); });
+        if (hasError && username && !username.value) {
+            username.value = sessionStorage.getItem(storageKey) || '';
+        }
+        username.addEventListener('input', function() { sessionStorage.setItem(storageKey, username.value); });
         loginForm.addEventListener('submit', function(event) {
             if (loginSubmitting) return;
             event.preventDefault();
             const btn = document.getElementById('submit-btn');
-            const submitLabel = btn.querySelector('.submit-label');
-            sessionStorage.setItem(usernameStorageKey, username.value);
-            submitLabel.textContent = 'Signing in';
+            const label = btn.querySelector('.submit-label');
+            sessionStorage.setItem(storageKey, username.value);
+            label.textContent = 'Signing in';
             btn.disabled = true;
-            btn.setAttribute('aria-busy', 'true');
+            loginForm.setAttribute('aria-busy', 'true');
             btn.classList.add('loading');
             loginSubmitting = true;
             requestAnimationFrame(function() { requestAnimationFrame(function() { HTMLFormElement.prototype.submit.call(loginForm); }); });

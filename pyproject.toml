@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ldapgate"
-version = "0.1.27"
+version = "0.1.28"
 description = "Lightweight LDAP/AD authentication proxy and FastAPI middleware"
 readme = "README.md"
 requires-python = ">=3.10"
