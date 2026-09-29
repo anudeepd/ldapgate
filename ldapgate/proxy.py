@@ -92,19 +92,21 @@ LOGIN_FORM_HTML = """
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#020617">
     <title>Sign in{% if app_name %} — {{ app_name }}{% endif %}</title>
     <style nonce="{{ csrf_nonce }}">
         :root {
-            --bg: #020617; --card: #0f172a; --card-border: #1e293b;
+            color-scheme: dark;
+            --bg: #020617; --card: #0f172a; --card-border: #1e293b; --hover: #1e293b;
             --field: #1e293b; --field-border: #334155; --label: #94a3b8;
-            --text: #e2e8f0; --text-strong: #f8fafc; --faint: #86909d;
+            --text: #e2e8f0; --text-strong: #f1f5f9; --faint: #86909d;
             --accent: #2563eb; --accent-hover: #2e69ec; --accent-border: #3b82f6;
             --accent-soft: #bfdbfe; --focus: #3b82f6; --focus-glow: rgb(59 130 246 / .20);
             --error-bg: #1c0505; --error-border: #7f1d1d; --error-text: #fca5a5;
         }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; -webkit-font-smoothing: antialiased; }
+        body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: calc(1.5rem + env(safe-area-inset-top)) calc(1.5rem + env(safe-area-inset-right)) calc(1.5rem + env(safe-area-inset-bottom)) calc(1.5rem + env(safe-area-inset-left)); -webkit-font-smoothing: antialiased; }
         .login-shell { position: relative; width: 100%; max-width: 400px; }
         .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; box-shadow: 0 25px 50px -12px rgb(0 0 0 / .6); padding: 2.5rem 2rem; width: 100%; max-width: 400px; animation: login-card-in 340ms cubic-bezier(.16, 1, .3, 1) both; }
         .logo-wrap { display: flex; align-items: center; justify-content: center; gap: 0.625rem; margin-bottom: 2rem; }
@@ -121,8 +123,10 @@ LOGIN_FORM_HTML = """
         .password-field input { padding-inline-end: 3rem; }
         .password-toggle { position: absolute; inset-inline-end: 0.5rem; top: 50%; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: pointer; transform: translateY(-50%); }
         input[type="password"]::-ms-reveal { display: none; }
+        .password-field.native-reveal input { padding-inline-end: 0.75rem; }
+        .reveal-probe { position: absolute; visibility: hidden; pointer-events: none; }
         .password-toggle[hidden] { display: none; }
-        .password-toggle:hover { background: var(--card-border); color: var(--text); }
+        .password-toggle:hover { background: var(--hover); color: var(--text); }
         .password-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
         .password-toggle svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
         .password-toggle .eye-closed, .password-toggle[aria-pressed="true"] .eye-open { display: none; }
@@ -144,66 +148,129 @@ LOGIN_FORM_HTML = """
         .powered-by span { white-space: nowrap; }
         .powered-by a { color: var(--label); text-decoration: none; }
         .powered-by a:hover { color: var(--accent-soft); }
+        .powered-by a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+        .error:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
         @media (prefers-reduced-motion: reduce) { .card, .error, .spinner { animation: none; } button[type="submit"] { transition: none; } }
     </style>
 </head>
 <body>
-    <div class="login-shell">
+    <main class="login-shell">
         <div class="feedback-slot" aria-live="off">
             {% if error %}
-            <div class="error" id="login-error" role="alert">
+            <div class="error" id="login-error" role="alert" tabindex="-1">
                 <svg class="error-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M7.5 1a6.5 6.5 0 1 0 0 13A6.5 6.5 0 0 0 7.5 1ZM7 4.5a.5.5 0 0 1 1 0v4a.5.5 0 0 1-1 0v-4Zm.5 6.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" fill="currentColor"/></svg>
                 <span>{{ error }}</span>
             </div>
             {% endif %}
         </div>
         <div class="card">
-            <div class="logo-wrap"><span class="logo-text">{{ app_name or "LDAPGate" }}</span></div>
+            <div class="logo-wrap"><h1 class="logo-text">{{ app_name or "LDAPGate" }}</h1></div>
             <form method="POST" action="{{ login_path }}" id="login-form">
                 {% if redirect %}<input type="hidden" name="redirect" value="{{ redirect }}">{% endif %}
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <div class="field"><label for="username">Username</label><input type="text" id="username" name="username" autocomplete="username"{% if error %} aria-describedby="login-error"{% endif %} autofocus required></div>
-                <div class="field"><label for="password">Password</label><div class="password-field"><input type="password" id="password" name="password" autocomplete="current-password"{% if error %} aria-describedby="login-error"{% endif %} required><button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" aria-controls="password" aria-pressed="false" hidden><svg class="eye-open" aria-hidden="true" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-closed" aria-hidden="true" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.58 10.58a2 2 0 0 0 2.83 2.83"/><path d="M9.36 5.36A10.7 10.7 0 0 1 12 5c5 0 8.73 4.11 9.94 6.36a1 1 0 0 1 0 .28 15.8 15.8 0 0 1-2.44 3.42M6.61 6.61C4.47 8.03 2.99 10.2 2.06 11.65a1 1 0 0 0 0 .7C3.27 14.9 7 19 12 19c1.42 0 2.74-.32 3.91-.86"/></svg></button></div></div>
+                <div class="field"><label for="username">Username</label><input type="text" id="username" name="username" autocomplete="username"{% if error %} aria-describedby="login-error" aria-invalid="true"{% endif %}{% if not error %} autofocus{% endif %} required spellcheck="false"></div>
+                <div class="field"><label for="password">Password</label><div class="password-field"><input type="password" id="password" name="password" autocomplete="current-password"{% if error %} aria-describedby="login-error" aria-invalid="true"{% endif %} required><button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" aria-controls="password" aria-pressed="false" hidden><svg class="eye-open" aria-hidden="true" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-closed" aria-hidden="true" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.58 10.58a2 2 0 0 0 2.83 2.83"/><path d="M9.36 5.36A10.7 10.7 0 0 1 12 5c5 0 8.73 4.11 9.94 6.36a1 1 0 0 1 0 .28 15.8 15.8 0 0 1-2.44 3.42M6.61 6.61C4.47 8.03 2.99 10.2 2.06 11.65a1 1 0 0 0 0 .7C3.27 14.9 7 19 12 19c1.42 0 2.74-.32 3.91-.86"/></svg></button></div></div>
                 <div class="submit-wrap"><button type="submit" id="submit-btn"><span class="spinner" aria-hidden="true"></span><span class="submit-label" aria-live="polite">Sign in</span></button></div>
             </form>
             <div class="powered-by"><svg class="security-lock" aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="12" height="9" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg><span>Secured by <a href="https://github.com/anudeepd/ldapgate" target="_blank" rel="noopener noreferrer">LDAPGate</a></span></div>
         </div>
-    </div>
+    </main>
     <script nonce="{{ csrf_nonce }}">
-        const loginForm = document.getElementById('login-form');
-        const username = document.getElementById('username');
-        const password = document.getElementById('password');
-        const passwordToggle = document.getElementById('password-toggle');
-        const storageKey = 'ldapgate:login:username';
-        const hasError = {{ 'true' if error else 'false' }};
-        let loginSubmitting = false;
-        if (password && passwordToggle) {
-            passwordToggle.hidden = false;
-            passwordToggle.addEventListener('click', function() {
-                const showing = password.type === 'password';
-                password.type = showing ? 'text' : 'password';
-                passwordToggle.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
-                passwordToggle.setAttribute('aria-pressed', String(showing));
-                password.focus();
-            });
-        }
-        if (hasError && username && !username.value) {
-            username.value = sessionStorage.getItem(storageKey) || '';
-        }
-        username.addEventListener('input', function() { sessionStorage.setItem(storageKey, username.value); });
-        loginForm.addEventListener('submit', function(event) {
-            if (loginSubmitting) return;
-            event.preventDefault();
-            const btn = document.getElementById('submit-btn');
-            const label = btn.querySelector('.submit-label');
-            sessionStorage.setItem(storageKey, username.value);
-            label.textContent = 'Signing in';
-            btn.disabled = true;
-            loginForm.setAttribute('aria-busy', 'true');
-            btn.classList.add('loading');
-            loginSubmitting = true;
-            requestAnimationFrame(function() { requestAnimationFrame(function() { HTMLFormElement.prototype.submit.call(loginForm); }); });
+    const loginForm = document.getElementById('login-form');
+    const username = document.getElementById('username');
+    const password = document.getElementById('password');
+    const passwordToggle = document.getElementById('password-toggle');
+    const storageKey = 'ldapgate:login:username';
+    const hasError = {{ 'true' if error else 'false' }};
+    let loginSubmitting = false;
+
+    // Firefox draws its own reveal button inside <input type="password"> when
+    // layout.forms.reveal-password-button.enabled is on (Nightly, some forks, any
+    // profile that sets it), next to the custom toggle. Page CSS cannot remove it:
+    // ::-moz-reveal is user-agent-only, ::-ms-reveal is Edge's, and painting it
+    // invisible is undone by Firefox's `input:autofill { color: FieldText !important }`,
+    // which is the normal state of a login page. What it does do is reserve room at
+    // the end of the field, so the password input reports a smaller clientWidth than
+    // an identical text input. When it does, the browser's control is the only one shown.
+    function browserDrawsRevealButton(field) {
+      const probe = document.createElement('input');
+      probe.type = 'text';
+      probe.tabIndex = -1;
+      probe.autocomplete = 'off';
+      probe.className = 'reveal-probe';
+      probe.setAttribute('aria-hidden', 'true');
+      field.parentNode.appendChild(probe);
+      const reserved = probe.clientWidth - field.clientWidth;
+      probe.remove();
+      return reserved > 2;
+    }
+
+    if (password && passwordToggle) {
+      if (browserDrawsRevealButton(password)) {
+        password.parentNode.classList.add('native-reveal');
+      } else {
+        passwordToggle.hidden = false;
+        passwordToggle.addEventListener('click', function() {
+          const showing = password.type === 'password';
+          password.type = showing ? 'text' : 'password';
+          passwordToggle.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+          passwordToggle.setAttribute('aria-pressed', String(showing));
+          password.focus();
         });
+      }
+    }
+
+
+    if (hasError && username && !username.value) {
+      try {
+        username.value = sessionStorage.getItem(storageKey) || '';
+      } catch (error) {
+        // Storage can be disabled by browser privacy settings; login still works.
+      }
+    }
+
+    // The alert is server-rendered, so a live region never announces it: move
+    // focus there instead. #username has no autofocus in that case.
+    const loginError = document.getElementById('login-error');
+    if (hasError && loginError) {
+      loginError.focus();
+    }
+
+
+    if (username) {
+      username.addEventListener('input', function() {
+        try {
+          sessionStorage.setItem(storageKey, username.value);
+        } catch (error) {
+          // Storage is a convenience only and must never block authentication.
+        }
+      });
+    }
+
+    loginForm.addEventListener('submit', function(event) {
+      if (loginSubmitting) return;
+
+      event.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const label = btn.querySelector('.submit-label');
+
+      try {
+        sessionStorage.setItem(storageKey, username.value);
+      } catch (error) {
+        // Storage is a convenience only and must never block authentication.
+      }
+      label.textContent = 'Signing in…';
+      btn.disabled = true;
+      loginForm.setAttribute('aria-busy', 'true');
+      btn.classList.add('loading');
+
+      loginSubmitting = true;
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          HTMLFormElement.prototype.submit.call(loginForm);
+        });
+      });
+    });
     </script>
 </body>
 </html>
