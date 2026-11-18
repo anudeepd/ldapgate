@@ -1,0 +1,208 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Create the GitHub Release and publish to PyPI after checks pass. Bump the version in a PR before dispatching.
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ldapgate-release
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Tests, lint, and lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install project and test dependencies
+        run: uv sync --frozen --extra dev
+      - name: Check lockfile
+        run: uv lock --check
+      - name: Lint
+        run: uv run --frozen ruff check .
+      - name: Tests
+        run: uv run --frozen pytest -q
+
+  build-dist:
+    name: Build and smoke-test distributions
+    needs: [checks]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Validate the release version and tag
+        id: version
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          version="$(python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          print(tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"])
+          PY
+          )"
+          init="$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          match = re.search(r"__version__ = '([^']+)'", Path("ldapgate/__init__.py").read_text())
+          print(match.group(1) if match else "")
+          PY
+          )"
+          if [[ -z "$version" || "$version" != "$init" ]]; then
+            echo "::error::pyproject.toml version $version does not match ldapgate/__init__.py version $init"
+            exit 1
+          fi
+          tag="v$version"
+          if [[ "$PUBLISH" == "true" ]]; then
+            if [[ "$GITHUB_REF_TYPE" != "branch" || "$GITHUB_REF_NAME" != "main" ]]; then
+              echo "::error::Publishing must be dispatched from the main branch."
+              exit 1
+            fi
+            set +e
+            git ls-remote --exit-code --refs origin "refs/tags/$tag" >/dev/null
+            status=$?
+            set -e
+            if [[ "$status" -eq 0 ]]; then
+              echo "::error::Release tag $tag already exists."
+              exit 1
+            elif [[ "$status" -ne 2 ]]; then
+              exit "$status"
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Selected ldapgate $version ($tag)."
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Validate distribution names and versions
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import tarfile
+          import tomllib
+          import zipfile
+          from email import message_from_bytes
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          wheels = list(Path("dist").glob("*.whl"))
+          sdists = list(Path("dist").glob("*.tar.gz"))
+          assert len(wheels) == 1, wheels
+          assert len(sdists) == 1, sdists
+          assert wheels[0].name == f"ldapgate-{version}-py3-none-any.whl", wheels[0].name
+          assert sdists[0].name == f"ldapgate-{version}.tar.gz", sdists[0].name
+          with zipfile.ZipFile(wheels[0]) as archive:
+              metadata_name = next(name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
+              metadata = message_from_bytes(archive.read(metadata_name))
+          assert metadata["Name"] == "ldapgate" and metadata["Version"] == version
+          with tarfile.open(sdists[0], "r:gz") as archive:
+              pyproject = next(name for name in archive.getnames() if name.endswith("/pyproject.toml"))
+              stream = archive.extractfile(pyproject)
+              assert stream is not None
+              project = tomllib.loads(stream.read().decode())["project"]
+          assert project["name"] == "ldapgate" and project["version"] == version
+          print(f"Validated {wheels[0].name} and {sdists[0].name}")
+          PY
+      - name: Install the wheel into a clean environment and smoke-test it
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          uv venv --python 3.12 /tmp/ldapgate-smoke
+          uv pip install --python /tmp/ldapgate-smoke/bin/python dist/*.whl
+          /tmp/ldapgate-smoke/bin/python - <<'PY'
+          import os
+          import time
+          from importlib.resources import files
+          from unittest.mock import patch
+
+          import ldapgate
+          from ldapgate.config import ProxySettings
+          from ldapgate.sessions import SessionManager
+
+          assert ldapgate.__version__ == os.environ["VERSION"]
+          assert (files("ldapgate") / "templates" / "login.html").is_file()
+
+          secret = "x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!"
+          valid = ProxySettings(secret_key=secret, session_ttl=14400, idle_timeout=14400)
+          assert valid.session_ttl == 14400 and valid.idle_timeout == 14400
+          try:
+              ProxySettings(secret_key=secret, session_ttl=3600, idle_timeout=14400)
+          except ValueError as exc:
+              assert "proxy.idle_timeout" in str(exc)
+          else:
+              raise SystemExit("invalid config was accepted")
+
+          manager = SessionManager(secret, session_ttl=14400, idle_timeout=14400)
+          cookie = manager.create_session("alice")
+          with patch("ldapgate._signer.time.time", return_value=time.time() + 3601):
+              assert manager.verify_session(cookie) == "alice"
+          print("Installed wheel smoke test passed")
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ldapgate-dist
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  pypi-publish:
+    name: Publish to PyPI with trusted publishing
+    if: ${{ inputs.publish }}
+    needs: [build-dist]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/ldapgate/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ldapgate-dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create GitHub Release
+    if: ${{ inputs.publish }}
+    needs: [build-dist, pypi-publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ldapgate-dist
+          path: dist
+      - name: Create release and attach the tested distributions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build-dist.outputs.tag }}
+        run: >-
+          gh release create "$RELEASE_TAG" dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --target "$GITHUB_SHA"
+          --title "ldapgate $RELEASE_TAG"
+          --generate-notes
