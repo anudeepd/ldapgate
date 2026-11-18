@@ -50,8 +50,8 @@ proxy:
   listen_port: 9000
   backend_url: http://localhost:8080
   secret_key: change-me-to-something-random
-  session_ttl: 3600
-  idle_timeout: 0                                  # set >0 to expire inactive browser sessions
+  session_ttl: 3600                                # absolute cookie and token lifetime
+  idle_timeout: 0                                  # inactivity limit; must be <= session_ttl
   user_header: X-Forwarded-User
   login_path: /_auth/login
   logout_path: /_auth/logout
@@ -59,6 +59,8 @@ proxy:
   mask_usernames_in_logs: true                    # set false to log full usernames
   secure_cookies: false                              # set true when behind HTTPS
 ```
+
+`proxy.session_ttl` is the absolute lifetime of the signed session cookie and token. `proxy.idle_timeout` is the inactivity limit. The idle limit must not exceed the absolute lifetime, because the cookie expires first and the idle timer can never fire. LDAPGate rejects that configuration at startup. The effective expiry is the earlier of the two.
 
 All settings can also be provided via environment variables using `__` as a separator — e.g. `LDAP__URL`, `PROXY__SECRET_KEY`.
 

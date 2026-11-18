@@ -158,6 +158,33 @@ def test_proxy_settings_defaults():
     assert settings.basic_auth_cache_ttl == 60
 
 
+def test_idle_timeout_cannot_exceed_session_ttl():
+    """An idle timeout longer than session_ttl can never be reached."""
+    with pytest.raises(ValueError, match=r'proxy\.idle_timeout'):
+        ProxySettings(
+            secret_key='x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!',
+            session_ttl=3600,
+            idle_timeout=14400,
+        )
+
+
+def test_idle_timeout_equal_to_session_ttl_is_allowed():
+    settings = ProxySettings(
+        secret_key='x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!',
+        session_ttl=14400,
+        idle_timeout=14400,
+    )
+    assert settings.idle_timeout == 14400
+
+
+def test_session_ttl_must_be_positive():
+    with pytest.raises(ValueError, match='greater than or equal to 1'):
+        ProxySettings(
+            secret_key='x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!',
+            session_ttl=0,
+        )
+
+
 def test_proxy_settings_can_log_full_usernames():
     settings = ProxySettings(
         secret_key='x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!',

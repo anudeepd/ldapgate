@@ -108,6 +108,18 @@ def test_idle_timeout_refreshes_on_activity(monkeypatch):
     assert manager.verify_session(cookie) is None
 
 
+def test_session_outlives_the_old_hour_default(monkeypatch):
+    """A four-hour session must survive the one-hour threshold."""
+    signed_at = 1000.0
+    monkeypatch.setattr('ldapgate._signer.time.time', lambda: signed_at)
+    manager = SessionManager(_TEST_SECRET, session_ttl=14400, idle_timeout=14400)
+    cookie = manager.create_session('testuser')
+
+    monkeypatch.setattr('ldapgate._signer.time.time', lambda: signed_at + 3601)
+
+    assert manager.verify_session(cookie) == 'testuser'
+
+
 def test_different_keys_dont_verify():
     """Test that sessions signed with different keys don't verify."""
     manager1 = SessionManager('x9Q#mK2vL$pN4wR8tJ6bY3cH7fG1eA5!', session_ttl=3600)

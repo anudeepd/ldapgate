@@ -141,7 +141,14 @@ class ProxySettings(BaseModel):
         description='Backend service URL to proxy to. Required in reverse-proxy mode; unused in middleware mode.',
     )
     secret_key: SecretStr = Field(..., description='Secret key for signing session cookies')
-    session_ttl: int = Field(3600, description='Session time-to-live in seconds')
+    session_ttl: int = Field(
+        3600,
+        ge=1,
+        description=(
+            'Absolute lifetime of the signed session cookie and token in seconds. '
+            'Must be at least idle_timeout.'
+        ),
+    )
     csrf_ttl: int = Field(
         24 * 3600,
         description=(
@@ -297,6 +304,18 @@ class ProxySettings(BaseModel):
         if login and v == login:
             raise ValueError('login_path and logout_path must be different paths')
         return v
+
+    @model_validator(mode='after')
+    def _validate_timeout_order(self) -> 'ProxySettings':
+        """Keep the inactivity limit reachable inside the absolute lifetime."""
+        if self.idle_timeout > 0 and self.idle_timeout > self.session_ttl:
+            raise ValueError(
+                f'proxy.idle_timeout ({self.idle_timeout}s) is longer than '
+                f'proxy.session_ttl ({self.session_ttl}s). The signed session cookie '
+                'and token expire at session_ttl, so the idle timeout can never be '
+                f'reached. Set proxy.session_ttl to at least {self.idle_timeout}.'
+            )
+        return self
 
 
 class LDAPConfig(BaseSettings):
